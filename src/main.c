@@ -20,7 +20,28 @@ char g_pli;
 int g_pdb_ref_no = 0;   // atom counter
 ap *g_pdb_ref = NULL;   // atoms array
 
+void find_next_serials(const ap *atoms, int n_atoms, int *next_atom_ser, int *next_res_ser)
+{
+    int max_atom_ser = 0;
+    int max_res_ser  = 0;
 
+    if (!next_atom_ser || !next_res_ser) return;
+
+    /* Üres lista esetén kezdjük 1-ről */
+    if (!atoms || n_atoms <= 0) {
+        *next_atom_ser = 1;
+        *next_res_ser  = 1;
+        return;
+    }
+
+    for (int i = 0; i < n_atoms; i++) {
+        if (atoms[i].atom_ser > max_atom_ser) max_atom_ser = atoms[i].atom_ser;
+        if (atoms[i].res_ser  > max_res_ser)  max_res_ser  = atoms[i].res_ser;
+    }
+
+    *next_atom_ser = max_atom_ser + 1;
+    *next_res_ser  = max_res_ser  + 1;
+}
 
 int main(int argc, char *argv[])
 {
@@ -39,7 +60,7 @@ int main(int argc, char *argv[])
 
     /* --- 2) PASS-szerű paraméterek --- */
     const double sigma_p   = 1.8;  /* próbagömb sugara (σ_p) */
-    const double weed_dist = 1.0;  /* minimális távolság két új pont között */
+    const double weed_dist = 3.5;  /* minimális távolság két új pont között */
     const int n_layers     = 1;    /* hány "bevonási" iterációt futtassunk */
 
     const int n_runs = 1;
