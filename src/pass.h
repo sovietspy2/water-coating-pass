@@ -87,4 +87,9 @@ int pass_like_coating(
 );
 
 int clashes_with_new_points(vec3 p, const vec3 *new_pts, int n_new, double sigma_new);
+
+char *pdb_to_edited(const char *in);
+
+void find_next_serials(const ap *atoms, int n_atoms, int *next_atom_ser, int *next_res_ser);
+
 #endif /* PASS_COAT_H */

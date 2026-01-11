@@ -1,0 +1,1 @@
+./timed.sh ./pass 1PSV.pdb 1.8 3.5 2

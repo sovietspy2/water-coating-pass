@@ -9,17 +9,6 @@
 #include <omp.h>
 #endif
 
-#ifndef PASS_DEBUG
-#define PASS_DEBUG 0
-#endif
-
-#if PASS_DEBUG
-#define DBG_PRINTF(...) printf(__VA_ARGS__)
-#else
-#define DBG_PRINTF(...) ((void)0)
-#endif
-
-/* Hard cap a szomszédok számára: megfogja a k^2 robbanást sűrű régiókban */
 #ifndef NEIGH_CAP
 #define NEIGH_CAP 96
 #endif
@@ -53,13 +42,7 @@ static int v3_normalize(vec3 in, vec3 *out) {
     return 1;
 }
 
-/* --- Atom sugarak (σ_i) becslése ---
- * Megjegyzés: itt minimális elemtérképet használunk (H, C, N, O, S).
- * Ha ismeretlen, konzervatív alapértéket adunk vissza.
- */
 static double sigma_from_atom(const ap *a) {
-    /* A PDB atomnév (pdb_type) tipikusan pl. " C  ", "CA", " O  " stb.
-       Itt egyszerűen megkeressük az első betűt, ami A-Z vagy a-z. */
     char e = '\0';
     for (size_t t = 0; t < 4; t++) {
         char c = a->pdb_type[t];
@@ -78,7 +61,6 @@ static double sigma_from_atom(const ap *a) {
     }
 }
 
-/* Kinyerjük egy atom 3D koordinátáját vec3-ként. */
 static vec3 pos_from_atom(const ap *a) {
     return v3(a->x_coord, a->y_coord, a->z_coord);
 }
@@ -140,7 +122,6 @@ static int grid_build(grid3d *g, const vec3 *pos, const double *sigma, size_t n,
     g->max = mx;
     g->max_sigma = max_sigma;
 
-    /* cell size: a tipikus “interakciós sugár” nagyságrendje */
     g->cell = (max_sigma + sigma_p);
     if (g->cell < 1e-6) g->cell = 1.0;
 
@@ -176,7 +157,6 @@ static int grid_build(grid3d *g, const vec3 *pos, const double *sigma, size_t n,
     return 1;
 }
 
-/* Bridgeable dist²-vel (sqrt nélkül) */
 static int pair_bridgeable(vec3 A, double sigma_A, vec3 B, double sigma_B, double sigma_p) {
     double RA = sigma_A + sigma_p;
     double RB = sigma_B + sigma_p;
@@ -190,7 +170,6 @@ static int pair_bridgeable(vec3 A, double sigma_A, vec3 B, double sigma_B, doubl
     return 1;
 }
 
-/* --- K-nearest jellegű szomszéd limitálás (egyszerű, O(n*cap)) --- */
 static void neigh_try_add(
     int *neigh,
     double *neigh_d2,
@@ -223,7 +202,6 @@ static void neigh_try_add(
     }
 }
 
-/* --- egyszerű dinamikus vec3 lista --- */
 typedef struct {
     vec3 *data;
     size_t n;
@@ -279,7 +257,6 @@ static int clashes_with_any_grid(vec3 p, const grid3d *g, double sigma_p) {
     return 0;
 }
 
-/* New-point weeding grid-del */
 typedef struct {
     vec3 min;
     double cell;
@@ -396,7 +373,7 @@ static int grid_pts_add(grid_pts *gp, vec3 p) {
     return 1;
 }
 
-/* Új HOH oxigén atom kitöltése. */
+/* Új h2o oxigén atom kitöltése. */
 static void make_hoh_oxygen(
     ap *out,
     int model_ser,
@@ -433,7 +410,7 @@ static void make_hoh_oxygen(
     strncpy(out->pdbqt_type, "", sizeof(out->pdbqt_type) - 1);
 }
 
-/* -------- Appendix A szerinti számítás -------- */
+// PASS algo
 int three_point_sphere_geometry(
     vec3 i, double sigma_i,
     vec3 j, double sigma_j,
@@ -445,12 +422,11 @@ int three_point_sphere_geometry(
     double *V_out,
     double *h_out
 ) {
-    /* (1) Kiterjesztett sugarak: R_i = σ_i + σ_p stb. */
+
     double R_i = sigma_i + sigma_p;
     double R_j = sigma_j + sigma_p;
     double R_k = sigma_k + sigma_p;
 
-    /* (2) Lokális bázis felépítése: x' i->j irány, y' i-j-k síkban, z' merőleges. */
     vec3 ij = v3_sub(j, i);
     double d_ij = v3_norm(ij);
     if (d_ij < EPS) return 0;
@@ -460,39 +436,27 @@ int three_point_sphere_geometry(
 
     vec3 ik = v3_sub(k, i);
 
-    /* k koordinátája az x' tengelyen: x_k = (ik · ex) */
     double x_k = v3_dot(ik, ex);
 
-    /* y' irány: ik-ből kivesszük az x' komponensét */
     vec3 ik_perp = v3_sub(ik, v3_scale(ex, x_k));
     double y_k = v3_norm(ik_perp);
-    if (y_k < EPS) return 0; /* i, j, k közel kollineáris -> instabil */
+    if (y_k < EPS) return 0;
 
     vec3 ey;
-    if (!v3_normalize(ik_perp, &ey)) return 0; /* y' egységvektor */
+    if (!v3_normalize(ik_perp, &ey)) return 0;
 
-    vec3 ez = v3_cross(ex, ey); /* z' (jobbkéz-szabály) */
+    vec3 ez = v3_cross(ex, ey);
 
-    /* (3) U és V számítása (trilateration az i-j-k síkon)
-       Az Appendix A ábrájának megfelelően p = (U, V, h) a lokális bázisban. */
-
-    /* U az i->j tengely menti hely: */
     double U = (d_ij*d_ij + R_i*R_i - R_j*R_j) / (2.0*d_ij);
 
-    /* k lokális koordinátái: (x_k, y_k, 0)
-       V a síkon belüli második koordináta: */
-    double d_ik2 = v3_norm2(ik); /* x_k^2 + y_k^2 ugyanaz, csak stabilan */
+    double d_ik2 = v3_norm2(ik);
     double V = (d_ik2 + R_i*R_i - R_k*R_k - 2.0*x_k*U) / (2.0*y_k);
 
-    /* (4) h számítása Pithagorasz-szerűen az i középpontú gömbből:
-       U^2 + V^2 + h^2 = R_i^2  ->  h^2 = R_i^2 - U^2 - V^2 */
     double h2 = R_i*R_i - U*U - V*V;
-    if (h2 < -1e-8) return 0; /* nincs valós megoldás */
-    if (h2 < 0.0) h2 = 0.0;   /* kis negatív numerikus hiba levágása */
+    if (h2 < -1e-8) return 0;
+    if (h2 < 0.0) h2 = 0.0;
     double h = sqrt(h2);
 
-    /* (5) p visszaalakítása globális koordinátába:
-       p = i + U*ex + V*ey ± h*ez */
     vec3 base = v3_add(i, v3_add(v3_scale(ex, U), v3_scale(ey, V)));
 
     if (p_plus)  *p_plus  = v3_add(base, v3_scale(ez,  h));
@@ -502,7 +466,6 @@ int three_point_sphere_geometry(
     if (V_out) *V_out = V;
     if (h_out) *h_out = h;
 
-    /* Ha h = 0, a két megoldás egybeesik (érintő eset). */
     return (h < EPS) ? 1 : 2;
 }
 
@@ -527,11 +490,8 @@ int pass_like_coating(
 
     int total_added = 0;
 
-    printf("pass\n");
-
     for (int layer = 0; layer < n_layers; layer++) {
         size_t n_substrate = (size_t)n_atoms;
-        printf("Current layer: %d \n", layer + 1);
 
         vec3 *pos = (vec3*)malloc(n_substrate * sizeof(vec3));
         double *sig = (double*)malloc(n_substrate * sizeof(double));
@@ -549,7 +509,6 @@ int pass_like_coating(
             break;
         }
 
-        /* Globális weeding grid (végső összefésüléshez) */
         grid_pts ng;
         if (!grid_pts_init(&ng, g.min, g.max, weed_dist, 1024)) {
             grid_free(&g);
@@ -557,13 +516,11 @@ int pass_like_coating(
             break;
         }
 
-        /* A szálak által gyűjtött jelöltek egyesítve ide jönnek */
         vec3_list all_candidates = {0};
 
-        /* ---------- OpenMP: párhuzamos a ciklus ---------- */
+
         #pragma omp parallel
         {
-            /* Szál-lokális jelölt lista + szál-lokális weeding (csak saját jelölteken) */
             vec3_list local = {0};
 
             grid_pts local_ng;
@@ -591,7 +548,6 @@ int pass_like_coating(
 
                 int nnb = 0;
 
-                /* Szomszédok gyűjtése: már itt pontos bridgeable szűrés + K-cap */
                 for (int dz = -r; dz <= r; dz++) {
                     int zz = iz + dz; if (zz < 0 || zz >= g.nz) continue;
                     for (int dy = -r; dy <= r; dy++) {
@@ -606,7 +562,6 @@ int pass_like_coating(
                                 vec3 jpos = pos[(size_t)bi];
                                 double sigma_j = sig[(size_t)bi];
 
-                                /* pontos páros szűrés (ez sok szemetet kidob) */
                                 double d2 = v3_dist2(i, jpos);
                                 double RA = sigma_i + sigma_p;
                                 double RB = sigma_j + sigma_p;
@@ -623,7 +578,6 @@ int pass_like_coating(
                     }
                 }
 
-                /* Tripletezés a capped szomszédokból */
                 for (int nb1 = 0; nb1 + 1 < nnb; nb1++) {
                     size_t b = (size_t)neigh[nb1];
                     vec3 j = pos[b];
@@ -654,10 +608,8 @@ int pass_like_coating(
                         for (int s = 0; s < nsol; s++) {
                             vec3 p = (s == 0) ? p_plus : p_minus;
 
-                            /* Ütközés: globális szubsztráthoz (read-only, OK párhuzamosan) */
                             if (clashes_with_any_grid(p, &g, sigma_p)) continue;
 
-                            /* Szál-lokális weed (csak a saját jelöltek között) */
                             if (local_ng_ok) {
                                 if (too_close_to_new_grid(p, &local_ng, weed_dist)) continue;
                                 (void)grid_pts_add(&local_ng, p);
@@ -674,7 +626,6 @@ int pass_like_coating(
             free(neigh_d2);
             grid_pts_free(&local_ng);
 
-            /* Szál-lokális listák összefésülése a globáliszba */
             #pragma omp critical
             {
                 for (size_t i = 0; i < local.n; i++) {
@@ -685,7 +636,6 @@ int pass_like_coating(
             v3list_free(&local);
         } /* omp parallel */
 
-        /* ---------- Globális weeding + append (determinista, szálbiztos) ---------- */
         for (size_t t = 0; t < all_candidates.n; t++) {
             vec3 p = all_candidates.data[t];
 
@@ -728,3 +678,62 @@ int pass_like_coating(
 
     return total_added;
 }
+
+// PDB pdb etc
+static int ends_with_pdb_ci(const char *s) {
+    size_t n = strlen(s);
+    if (n < 4) return 0;
+    char a = s[n-4], b = s[n-3], c = s[n-2], d = s[n-1];
+    if (a != '.') return 0;
+    if (b >= 'a' && b <= 'z') b = (char)(b - 'a' + 'A');
+    if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+    if (d >= 'a' && d <= 'z') d = (char)(d - 'a' + 'A');
+    return (b == 'P' && c == 'D' && d == 'B');
+}
+
+char *pdb_to_edited(const char *in) {
+    if (!in) return NULL;
+
+    const char *suffix = "_edited.pdb";
+    size_t in_len = strlen(in);
+
+    if (!ends_with_pdb_ci(in)) {
+        char *out = (char*)malloc(in_len + 1);
+        if (!out) return NULL;
+        memcpy(out, in, in_len + 1);
+        return out;
+    }
+
+    size_t base_len = in_len - 4;
+    size_t out_len = base_len + strlen(suffix);
+
+    char *out = (char*)malloc(out_len + 1);
+    if (!out) return NULL;
+
+    memcpy(out, in, base_len);
+    memcpy(out + base_len, suffix, strlen(suffix) + 1); // includes '\0'
+    return out;
+}
+
+void find_next_serials(const ap *atoms, int n_atoms, int *next_atom_ser, int *next_res_ser) {
+    int max_atom_ser = 0;
+    int max_res_ser = 0;
+
+    if (!next_atom_ser || !next_res_ser) return;
+
+    /* Üres lista esetén kezdjük 1-ről */
+    if (!atoms || n_atoms <= 0) {
+        *next_atom_ser = 1;
+        *next_res_ser = 1;
+        return;
+    }
+
+    for (int i = 0; i < n_atoms; i++) {
+        if (atoms[i].atom_ser > max_atom_ser) max_atom_ser = atoms[i].atom_ser;
+        if (atoms[i].res_ser > max_res_ser) max_res_ser = atoms[i].res_ser;
+    }
+
+    *next_atom_ser = max_atom_ser + 1;
+    *next_res_ser = max_res_ser + 1;
+}
+
