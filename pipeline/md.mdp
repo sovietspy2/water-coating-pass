@@ -1,0 +1,34 @@
+; Modified md.mdp for Pseudo-PBC
+cpp                 = /usr/bin/cpp
+define              = -DPOSRES
+constraints         = all-bonds
+integrator          = md
+dt                  = 0.002
+nsteps              = 500000        ; total 1 ns.
+nstcomm             = 500
+nstxout             = 500
+nstvout             = 500
+nstlog              = 500
+nstenergy           = 500
+nstlist             = 10
+ns_type             = grid
+cutoff-scheme       = Verlet
+
+; Pseudo-PBC / Vacuum Settings
+coulombtype         = cutoff        ; Use cutoff for vacuum
+rlist               = 333.3         ; Large cutoff for vacuum
+rcoulomb            = 333.3         ; Large cutoff for vacuum
+rvdw                = 333.3         ; Large cutoff for vacuum
+
+; Temperature Coupling
+Tcoupl              = v-rescale
+tc-grps             = Protein non-Protein
+tau_t               = 0.1 0.1
+ref_t               = 300 300
+energygrps          = Protein non-Protein
+
+; NO Pressure Coupling for vacuum simulation
+
+gen_vel             = yes           ; Generate initial velocities
+gen_temp            = 300.0
+gen_seed            = 28480426

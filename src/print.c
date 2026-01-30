@@ -13,7 +13,7 @@ char *print_pdb_file (ap *pdb, int atom_num, char file_out [MAX_FILENAME_LENGTH]
 
     outfile=fopen(file_out,"w");
 
-    sprintf(header,"%s","REMARK Input coordinates.\n");
+    sprintf(header,"%s","REMARK Input coordinates.\nMODEL        1\n");
     fputs(header,outfile);
 
     for (j = 0; j < atom_num; j++) {
