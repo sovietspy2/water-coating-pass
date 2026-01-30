@@ -389,7 +389,7 @@ static void make_hoh_oxygen(
     out->atom_ser = atom_ser;
     strncpy(out->pdb_type, "O", sizeof(out->pdb_type) - 1);
     strncpy(out->pdb_alt_loc, "", sizeof(out->pdb_alt_loc) - 1);
-    strncpy(out->res_type, "H2O", sizeof(out->res_type) - 1);
+    strncpy(out->res_type, "WAT", sizeof(out->res_type) - 1);
 
     out->chain[0] = chain_id;
     out->chain[1] = '\0';
