@@ -36,7 +36,7 @@ gmx trjconv -f md.trr -s md.tpr -o pbc_whole.xtc -pbc whole <<EOF
 EOF
 # 6b. Center the system and remove the periodic box for a compact view.
 # '1' is the Solvent group (water), '0' is System.
-gmx trjconv -f pbc_whole.xtc -s md.tpr -o system_compact.xtc -center -pbc mol -ur compact <<EOF
+gmx trjconv -f pbc_whole.xtc -s md.tpr -o system_compact.xtc -center -pbc mol -ur compact -boxcenter zero <<EOF
 1
 0
 EOF
