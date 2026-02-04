@@ -2,7 +2,7 @@
 
 # --- 1. SETUP ---
 # Generate topology (topol.top) and initial structure (conf.gro)
-gmx pdb2gmx -water tip3p -ff amber99sb-ildn -ignh -f ../src/1PSV_edited.pdb -o conf.gro
+gmx pdb2gmx -water tip3p -ff amber99sb-ildn -ignh -f  ./2/step2.pdb -o conf.gro
 
 # --- 2. PREPARATION FOR PSEUDO-PBC ---
 # Center system and place it in a large cubic box (1000 nm) to satisfy the 333.3 nm cutoffs
@@ -45,3 +45,5 @@ EOF
 gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b 1000 -e 1000 <<EOF
 0
 EOF
+
+python clean_pdb.py
