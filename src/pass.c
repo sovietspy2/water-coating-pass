@@ -490,8 +490,10 @@ int pass_like_coating(
 
     int total_added = 0;
 
+    const size_t fixed_substrate = (size_t)n_atoms;
+
     for (int layer = 0; layer < n_layers; layer++) {
-        size_t n_substrate = (size_t)n_atoms;
+        size_t n_substrate = fixed_substrate;
 
         vec3 *pos = (vec3*)malloc(n_substrate * sizeof(vec3));
         double *sig = (double*)malloc(n_substrate * sizeof(double));
@@ -517,7 +519,6 @@ int pass_like_coating(
         }
 
         vec3_list all_candidates = {0};
-
 
         #pragma omp parallel
         {
