@@ -35,6 +35,7 @@ mkdir -p -- "$OUTDIR"
 # Fill this whitelist later (exact filenames or glob patterns).
 # These names are excluded from moving.
 WHITELIST=(
+  "cleanup.sh"
   "pass5x5.sh"
   "pass5x1.sh"
   "mm_minim.sh"
