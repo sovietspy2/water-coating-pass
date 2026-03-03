@@ -1,8 +1,15 @@
 #!/bin/bash
 
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <input.pdb>" >&2
+  exit 1
+fi
+
+INPUT_PDB="$1"
+
 # --- 1. SETUP ---
 # Generate topology (topol.top) and initial structure (conf.gro)
-gmx pdb2gmx -water tip3p -ff amber99sb-ildn -ignh -f  ./2/step2.pdb -o conf.gro
+gmx pdb2gmx -water tip3p -ff amber99sb-ildn -ignh -f  "$INPUT_PDB" -o conf.gro
 
 # --- 2. PREPARATION FOR PSEUDO-PBC ---
 # Center system and place it in a large cubic box (1000 nm) to satisfy the 333.3 nm cutoffs
