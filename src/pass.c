@@ -691,10 +691,19 @@ static int ends_with_pdb_ci(const char *s) {
     return (b == 'P' && c == 'D' && d == 'B');
 }
 
-char *pdb_to_edited(const char *in) {
+char *pdb_to_edited(const char *in, int layer) {
     if (!in) return NULL;
+    const char *suffix;
+    if (layer == 1) {
+        suffix = "_1WAT.pdb";
+    } else {
 
-    const char *suffix = "_edited.pdb";
+        const char *base = "WAT.pdb";
+        char out[256];
+        snprintf(out, sizeof out, "_%d%s", layer, base);
+        suffix = out;
+    }
+
     size_t in_len = strlen(in);
 
     if (!ends_with_pdb_ci(in)) {

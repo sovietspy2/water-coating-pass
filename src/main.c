@@ -22,8 +22,11 @@ ap *g_pdb_ref = NULL; // atoms array
 
 int main(int argc, char *argv[]) {
 
+    struct timespec start_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+
     char file[200];
-    // pass params
+
     double sigma_p = 1.8; /* próbagömb sugara */
     double weed_dist = 3.5; /* minimális távolság két új pont között */
     int n_layers = 1;
@@ -68,9 +71,11 @@ int main(int argc, char *argv[]) {
 
     printf("Added HOH oxygens: %d\n", added);
 
-    char *output_file = pdb_to_edited(file);
+    char *output_file = pdb_to_edited(file, n_layers);
     printf("%s created \n", output_file);
     print_pdb_file(g_pdb_ref, g_pdb_ref_no, output_file);
+
+    print_logs(output_file, added, start_time);
 
     free(g_pdb_ref);
 
