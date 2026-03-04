@@ -10,7 +10,7 @@ char *create_log_file_name(const char *input, const char *sep)
     if (localtime_r(&now, &tm_local) == NULL) return NULL;
 
     char dt[32];
-    if (strftime(dt, sizeof dt, "%Y-%m-%d %H:%M:%S", &tm_local) == 0) return NULL;
+    if (strftime(dt, sizeof dt, "pass-%Y-%m-%d %H:%M:%S", &tm_local) == 0) return NULL;
 
     int needed = snprintf(NULL, 0, "%s%s%s", input, sep, dt);
     if (needed < 0) return NULL;
