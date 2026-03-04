@@ -15,6 +15,11 @@ if [[ ! -f "$INPUT_PDB" ]]; then
   exit 1
 fi
 
+if [[ "$INPUT_PDB" != *.pdb ]]; then
+  echo "Error: input must end with .pdb (got: $INPUT_PDB)" >&2
+  exit 1
+fi
+
 BASE="${INPUT_PDB%.pdb}"
 TOPDIR="${BASE}5x5"
 mkdir -p -- "$TOPDIR"
@@ -35,15 +40,16 @@ WHITELIST=(
 
 move_everything_except_whitelist() {
   local target="$1"
-  shopt -s extglob nullglob
 
-  local pattern="!("
+  # Safe for spaces/special characters using NUL delimiters. [web:83]
+  local -a find_args
+  find_args=( -maxdepth 1 -mindepth 1 )
+
   for w in "${WHITELIST[@]}"; do
-    pattern+="$w|"
+    find_args+=( -not -name "$w" )
   done
-  pattern="${pattern%|})"
 
-  mv -- $pattern "$target"/
+  find . "${find_args[@]}" -print0 | xargs -0 -I{} mv -- "{}" "$target"/
 }
 
 current_in="$INPUT_PDB"
@@ -52,15 +58,8 @@ for i in {1..5}; do
   run_dir="$TOPDIR/$i"
   mkdir -p -- "$run_dir"
 
-  # pass output naming rule:
-  # ASD.pdb -> ASD_1WAT.pdb, then ASD_1WAT.pdb -> ASD_1WAT_1WAT.pdb, ...
+  # Append _1WAT before the final .pdb every iteration. [web:49][web:46]
   pass_out="${current_in%.pdb}_1WAT.pdb"
-
-  # mm_minim input naming rule (your examples):
-  # ASD.pdb -> ASD_WAT1.pdb
-  # ASD_1WAT.pdb -> ASD_WAT1_1WAT.pdb
-  # i.e., take pass_out and replace the first occurrence of "_1WAT" with "_WAT1"
-  mm_in="${pass_out/_1WAT/_WAT1}"   # bash string replacement: ${var/pattern/repl} [web:81]
 
   echo "[run $i] pass \"$current_in\" 1.8 3.5 1  (expect: $pass_out)"
   pass "$current_in" 1.8 3.5 1
@@ -70,19 +69,11 @@ for i in {1..5}; do
     exit 1
   fi
 
-  # If pass already produces mm_in directly, this will be a no-op overwrite-safe copy.
-  # If it does NOT, we create mm_in from pass_out so mm_minim.sh matches your required name.
-  if [[ "$mm_in" != "$pass_out" ]]; then
-    cp -f -- "$pass_out" "$mm_in"
-  fi
+  echo "[run $i] mm_minim.sh \"$pass_out\""
+  ./mm_minim.sh "$pass_out"
 
-  echo "[run $i] mm_minim.sh \"$mm_in\""
-  ./mm_minim.sh "$mm_in"
-
-  # Move run outputs into the numbered folder
   move_everything_except_whitelist "$run_dir"
 
-  # Prepare next iteration input (bring it back into working dir)
   cp -f -- "$run_dir/$pass_out" .
   current_in="$pass_out"
 done

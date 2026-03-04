@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <input.pdb>" >&2
@@ -7,9 +8,20 @@ fi
 
 INPUT_PDB="$1"
 
+# --- TIMER SETUP ---
+SECONDS=0
+TIMEFILE="${INPUT_PDB}-mm-process-time.txt"
+
+write_runtime() {
+  local elapsed="$SECONDS"
+  # Write runtime (in seconds) to the requested file
+  printf 'runtime for mm is %s seconds\n' "$elapsed" > "$TIMEFILE"
+}
+trap write_runtime EXIT
+
 # --- 1. SETUP ---
 # Generate topology (topol.top) and initial structure (conf.gro)
-gmx pdb2gmx -water tip3p -ff amber99sb-ildn -ignh -f  "$INPUT_PDB" -o conf.gro
+gmx pdb2gmx -water tip3p -ff amber99sb-ildn -ignh -f "$INPUT_PDB" -o conf.gro
 
 # --- 2. PREPARATION FOR PSEUDO-PBC ---
 # Center system and place it in a large cubic box (1000 nm) to satisfy the 333.3 nm cutoffs
