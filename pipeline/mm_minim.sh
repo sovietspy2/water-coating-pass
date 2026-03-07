@@ -65,4 +65,5 @@ gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b 1000 -e 100
 0
 EOF
 
+#removing extra waters that are not connected to the protein
 python clean_pdb.py

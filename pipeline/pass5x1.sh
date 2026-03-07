@@ -28,7 +28,14 @@ pass "$INPUT_PDB" 1.8 3.5 5
 # ---- 2) Run minimization once with INPUT_PDB_5WAT ----
 ./mm_minim.sh "$WAT_PDB"
 
-# ---- 3) Move outputs into a folder named after INPUT_PDB (base) ----
+# ---- 3) Copy filtered_renum.pdb to BASE-FINAL.pdb ----
+if [[ ! -f "filtered_renum.pdb" ]]; then
+  echo "Error: filtered_renum.pdb not found after minimization" >&2
+  exit 1
+fi
+cp -- "filtered_renum.pdb" "${BASE}-FINAL.pdb"
+
+# ---- 4) Move outputs into a folder named after INPUT_PDB (base) ----
 OUTDIR="${BASE}5x1"
 mkdir -p -- "$OUTDIR"
 
