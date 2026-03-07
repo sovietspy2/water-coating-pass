@@ -41,7 +41,6 @@ WHITELIST=(
 move_everything_except_whitelist() {
   local target="$1"
 
-  # Safe for spaces/special characters using NUL delimiters. [web:83]
   local -a find_args
   find_args=( -maxdepth 1 -mindepth 1 )
 
@@ -58,8 +57,8 @@ for i in {1..5}; do
   run_dir="$TOPDIR/$i"
   mkdir -p -- "$run_dir"
 
-  # Append _1WAT before the final .pdb every iteration. [web:49][web:46]
   pass_out="${current_in%.pdb}_1WAT.pdb"
+  mm_out="${current_in%.pdb}_1WAT_mm.pdb"
 
   echo "[run $i] pass \"$current_in\" 1.8 3.5 1  (expect: $pass_out)"
   pass "$current_in" 1.8 3.5 1
@@ -69,13 +68,24 @@ for i in {1..5}; do
     exit 1
   fi
 
+  # make sure there is no old filtered_renum.pdb present
+  rm -f -- filtered_renum.pdb
+  # run mm
   echo "[run $i] mm_minim.sh \"$pass_out\""
   ./mm_minim.sh "$pass_out"
 
+  if [[ ! -f "filtered_renum.pdb" ]]; then
+    echo "Error: expected MM output not found: filtered_renum.pdb" >&2
+    exit 1
+  fi
+
+  cp -f -- "filtered_renum.pdb" "$mm_out"
+
   move_everything_except_whitelist "$run_dir"
 
-  cp -f -- "$run_dir/$pass_out" .
-  current_in="$pass_out"
+  cp -f -- "$run_dir/$mm_out" .
+
+  current_in="$mm_out"
 done
 
 echo "Done. Results are under: $TOPDIR/{1..5}/"
