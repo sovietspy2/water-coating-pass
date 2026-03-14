@@ -33,7 +33,7 @@ if [[ ! -f "filtered_renum.pdb" ]]; then
   echo "Error: filtered_renum.pdb not found after minimization" >&2
   exit 1
 fi
-cp -- "filtered_renum.pdb" "${BASE}-mm.pdb"
+cp -- "filtered_renum.pdb" "${WAT_PDB}-mm.pdb"
 
 # ---- 4) Move outputs into a folder named after INPUT_PDB (base) ----
 OUTDIR="${BASE}5x1"
