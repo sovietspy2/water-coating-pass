@@ -1,16 +1,31 @@
 #!/usr/bin/env python3
 import re
 import math
+import os
+import sys
 
 # ---------------------------
 # User settings
 # ---------------------------
-INP  = "lastframe_drop.pdb"
-OUT  = "filtered_renum.pdb"
-REP  = "removed_waters.tsv"
+DEFAULT_INP = "lastframe_drop.pdb"
+OUT_NAME = "filtered_renum.pdb"
+REP_NAME = "removed_waters.tsv"
 
 WATER_RESNAMES = {"SOL", "HOH", "WAT"}
 DCUT = 30.0  # Å: delete water residues whose oxygen is farther than this from ANY protein heavy atom
+
+# ---------------------------
+# Input / output paths
+# ---------------------------
+INP = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_INP
+INP = os.path.abspath(INP)
+
+if not os.path.isfile(INP):
+    raise SystemExit(f"Input file not found: {INP}")
+
+WORKDIR = os.path.dirname(INP)
+OUT = os.path.join(WORKDIR, OUT_NAME)
+REP = os.path.join(WORKDIR, REP_NAME)
 
 # ---------------------------
 # Helpers (robust to stuck-together coords like 1132.340-665.460-4394.330)

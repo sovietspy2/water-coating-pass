@@ -1,55 +1,73 @@
 #!/bin/bash
 set -euo pipefail
 
-# Usage: ./pass5x5.sh INPUT_PDB
-# Example: ./pass5x5.sh ASD.pdb
+# Usage: ./pass5x5.sh INPUT_PDB MODE
+# Example: ./pass5x5.sh /abs/path/ASD.pdb gromacs
 
-if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 <INPUT_PDB>" >&2
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/pipeline_common.sh"
+
+if [[ $# -ne 2 ]]; then
+  echo "Usage: $0 <INPUT_PDB> <MODE>" >&2
+  echo "Modes: gromacs, tinker" >&2
   exit 1
 fi
 
-INPUT_PDB="$1"
-if [[ ! -f "$INPUT_PDB" ]]; then
-  echo "Error: file not found: $INPUT_PDB" >&2
+INPUT_PDB="$(normalize_input_pdb "$1")"
+MODE="$2"
+
+if [[ "$MODE" != "gromacs" && "$MODE" != "tinker" ]]; then
+  echo "Error: invalid mode '$MODE' (expected gromacs or tinker)" >&2
   exit 1
 fi
 
-if [[ "$INPUT_PDB" != *.pdb ]]; then
-  echo "Error: input must end with .pdb (got: $INPUT_PDB)" >&2
-  exit 1
-fi
-
-BASE="${INPUT_PDB%.pdb}"
-TOPDIR="${BASE}5x5"
+INPUT_DIR="$(dirname "$INPUT_PDB")"
+BASE="$(basename "${INPUT_PDB%.pdb}")"
+TOPDIR="$(make_output_dir "$INPUT_PDB" "5x5")"
 mkdir -p -- "$TOPDIR"
 
 WHITELIST=(
   "pass5x1.sh"
   "pass5x5.sh"
-  "mm_minim.sh"
-  "pass"
-  "cg.mdp"
-  "md.mdp"
-  "clean_pdb.py"
-  "st.mdp"
+  "pipeline_common.sh"
+  # gromacs specific
   "cleanup.sh"
-  "$INPUT_PDB"
-  "$TOPDIR"
+  "mm_minim.sh"
+  "gromacs-cg.mdp"
+  "gromacs-md.mdp"
+  "clean_pdb.py"
+  "gromacs-st.mdp"
+  # tinker specific
+  "amber99.prm"
+  "tinker.sh"
+  "$(basename "$INPUT_PDB")"
+  "$(basename "$TOPDIR")"
 )
 
 move_everything_except_whitelist() {
   local target="$1"
+  local item
+  local skip
 
-  local -a find_args
-  find_args=( -maxdepth 1 -mindepth 1 )
+  for item in ./*; do
+    [[ -e "$item" ]] || continue
+    item="${item#./}"
+    skip=0
 
-  for w in "${WHITELIST[@]}"; do
-    find_args+=( -not -name "$w" )
+    for w in "${WHITELIST[@]}"; do
+      if [[ "$item" == "$w" ]]; then
+        skip=1
+        break
+      fi
+    done
+
+    if [[ "$skip" -eq 0 ]]; then
+      mv -- "$item" "$target"/
+    fi
   done
-
-  find . "${find_args[@]}" -print0 | xargs -0 -I{} mv -- "{}" "$target"/
 }
+
+pushd "$INPUT_DIR" >/dev/null
 
 current_in="$INPUT_PDB"
 
@@ -60,22 +78,25 @@ for i in {1..5}; do
   pass_out="${current_in%.pdb}_1WAT.pdb"
   mm_out="${current_in%.pdb}_1WAT_mm.pdb"
 
-  echo "[run $i] pass \"$current_in\" 1.8 3.5 1  (expect: $pass_out)"
+  #echo "[run $i] pass \"$current_in\" 1.8 3.5 1  (expect: $pass_out)"
   pass "$current_in" 1.8 3.5 1
 
   if [[ ! -f "$pass_out" ]]; then
     echo "Error: expected pass output not found: $pass_out" >&2
+    popd >/dev/null
     exit 1
   fi
 
   # make sure there is no old filtered_renum.pdb present
   rm -f -- filtered_renum.pdb
+
   # run mm
-  echo "[run $i] mm_minim.sh \"$pass_out\""
-  ./mm_minim.sh "$pass_out"
+  #echo "[run $i] mm_minim.sh \"$pass_out\"" OUTDATED
+  run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR"
 
   if [[ ! -f "filtered_renum.pdb" ]]; then
     echo "Error: expected MM output not found: filtered_renum.pdb" >&2
+    popd >/dev/null
     exit 1
   fi
 
@@ -83,9 +104,10 @@ for i in {1..5}; do
 
   move_everything_except_whitelist "$run_dir"
 
-  cp -f -- "$run_dir/$mm_out" .
+  cp -f -- "$run_dir/$(basename "$mm_out")" .
 
   current_in="$mm_out"
 done
 
+popd >/dev/null
 echo "Done. Results are under: $TOPDIR/{1..5}/"

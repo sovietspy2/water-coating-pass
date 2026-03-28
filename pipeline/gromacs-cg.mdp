@@ -1,4 +1,4 @@
-; Modified cg.mdp for Pseudo-PBC
+; Modified gromacs-cg.mdp for Pseudo-PBC
 define              = -DPOSRES -DPOSRES_WATER
 constraints         = none
 integrator          = cg          ; Conjugate Gradient minimization

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,44 +9,41 @@ if [[ $# -lt 1 ]]; then
   exit 1
 fi
 
-INPUT_PDB="$(normalize_input_pdb "$1")"
+INPUT_PDB="$1"
 INPUT_DIR="$(dirname "$INPUT_PDB")"
-BASE="$(basename "${INPUT_PDB%.pdb}")"
+PDB_NAME="$(basename "${INPUT_PDB%.pdb}")"
+echo $INPUT_PDB $INPUT_DIR  $PDB_NAME
+cp -f -- $SCRIPT_DIR/amber99.prm $INPUT_DIR/amber99.prm
+
+echo "${INPUT_DIR}/${PDB_NAME}.xyz"
 
 SECONDS=0
-TIMEFILE="${INPUT_PDB}-mm-process-time.txt"
+TIMEFILE="${PDB_NAME}-mm-process-time.txt"
 
 write_runtime() {
-  local elapsed="$SECONDS"
-  # Write runtime (in seconds) to the requested file
-  printf 'runtime for mm is %s seconds\n' "$elapsed" > "$TIMEFILE"
+  printf 'runtime for mm is %s seconds\n' "$SECONDS" > "$TIMEFILE"
 }
-trap write_runtime EXIT
 
-echo "tinker.sh start"
+trap write_runtime EXIT
 
 # --- 1. SETUP ---
 pdbxyz "$INPUT_PDB" <<EOF
 ALL
-${SCRIPT_DIR}/amber99.prm
+amber99.prm
 EOF
 
-echo "pdbxyz done"
-
-#echo "hello 2"
-
 # --- 2. MINIMIZATION ---
-minimize "${BASE}.xyz" <<EOF
-${SCRIPT_DIR}/amber99.prm
+minimize "${INPUT_DIR}/${PDB_NAME}.xyz" <<EOF
+amber99.prm
 0.01
 EOF
 
 
 # --- 3. BUILD RESTRICTION KEY ---
-awk '$3 == "CA" {print "RESTRICT  " $2 "  10"}' "${INPUT_PDB}" > key.key
+awk '$3 == "CA" {print "RESTRICT  " $2 "  10"}' "${INPUT_PDB}" > "${INPUT_DIR}/key.key"
 
-cat >> key.key <<EOF
-PARAMETERS ${SCRIPT_DIR}/amber99.prm
+cat >> "${INPUT_DIR}/key.key" <<EOF
+PARAMETERS amber99.prm
 
 RATTLE
 
@@ -54,10 +51,10 @@ vdw-cutoff 9.0
 chg-cutoff 9.0
 EOF
 
-echo "awk cat done"
 
 # --- 4. DYNAMICS ---
-dynamic "${BASE}.xyz_2" -k key.key <<EOF
+
+dynamic "${INPUT_DIR}/${PDB_NAME}".xyz_2 -k "$INPUT_DIR/key.key" <<EOF
 100000
 1.0
 10
@@ -65,17 +62,14 @@ dynamic "${BASE}.xyz_2" -k key.key <<EOF
 300
 EOF
 
-echo "dynamic done"
 
 # --- 5. CONVERT BACK TO PDB ---
-xyzpdb "${BASE}.arc" <<EOF
-${SCRIPT_DIR}/amber99.prm
+xyzpdb "${INPUT_DIR}/${PDB_NAME}.arc" <<EOF
+amber99.prm
 PDB
 EOF
 
-echo "xyzpdb done"
-
-OUT="${BASE}_mm.pdb"
-cp -f -- "${BASE}.pdb_2" "$OUT"
+OUT="${INPUT_DIR}/filtered_renum.pdb" # Double check
+cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_2" "$OUT"
 
 echo "tinker.sh done"

@@ -1,4 +1,4 @@
-; Modified md.mdp for Pseudo-PBC
+; Modified gromacs-md.mdp for Pseudo-PBC
 cpp                 = /usr/bin/cpp
 define              = -DPOSRES
 constraints         = all-bonds
