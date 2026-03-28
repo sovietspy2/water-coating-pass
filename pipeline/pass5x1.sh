@@ -28,7 +28,6 @@ WAT_PDB="${INPUT_DIR}/${BASE}_5WAT.pdb"
 # ---- 1) Run pass: creates/uses *_5WAT.pdb as you specified ----
 # You said: pass INPUT_PDB_5WAT.pdb 1.8 3.5 5
 # If pass actually needs the original input too, tell me and I’ll adjust.
-pushd "$INPUT_DIR" >/dev/null
 pass "$INPUT_PDB" 1.8 3.5 5
 
 # ---- 2) Run minimization once with INPUT_PDB_5WAT ----

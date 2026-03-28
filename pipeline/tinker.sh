@@ -12,7 +12,9 @@ fi
 INPUT_PDB="$1"
 INPUT_DIR="$(dirname "$INPUT_PDB")"
 PDB_NAME="$(basename "${INPUT_PDB%.pdb}")"
-echo $INPUT_PDB $INPUT_DIR  $PDB_NAME
+
+"$SCRIPT_DIR"/tinker-pdb-converter.sh "$INPUT_PDB"
+
 cp -f -- $SCRIPT_DIR/amber99.prm $INPUT_DIR/amber99.prm
 
 echo "${INPUT_DIR}/${PDB_NAME}.xyz"

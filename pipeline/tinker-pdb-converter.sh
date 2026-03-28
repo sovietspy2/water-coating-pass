@@ -2,12 +2,23 @@
 set -eu
 
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
-  echo "Usage: $0 input.pdb [output.pdb]" >&2
+  echo "Usage: $0 input.pdb [backup_suffix]" >&2
+  echo "Example: $0 structure.pdb .orig" >&2
   exit 1
 fi
 
 infile=$1
-outfile=${2:-"${infile%.pdb}_fixed.pdb"}
+backup_suffix=${2:-.orig}
+
+if [ ! -f "$infile" ]; then
+  echo "Error: file not found: $infile" >&2
+  exit 1
+fi
+
+backup_file="${infile}${backup_suffix}"
+tmpfile="${infile}.tmp.$$"
+
+cp -- "$infile" "$backup_file"
 
 awk '
 function trim(s) {
@@ -70,4 +81,6 @@ function atom_field(name,    n, l) {
     print $0
   }
 }
-' "$infile" > "$outfile"
+' "$infile" > "$tmpfile"
+
+mv -- "$tmpfile" "$infile"
