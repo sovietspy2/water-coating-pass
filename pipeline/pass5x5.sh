@@ -23,23 +23,11 @@ fi
 
 INPUT_DIR="$(dirname "$INPUT_PDB")"
 BASE="$(basename "${INPUT_PDB%.pdb}")"
+
 TOPDIR="$(make_output_dir "$INPUT_PDB" "5x5")"
 mkdir -p -- "$TOPDIR"
 
 WHITELIST=(
-  "pass5x1.sh"
-  "pass5x5.sh"
-  "pipeline_common.sh"
-  # gromacs specific
-  "cleanup.sh"
-  "mm_minim.sh"
-  "gromacs-cg.mdp"
-  "gromacs-md.mdp"
-  "clean_pdb.py"
-  "gromacs-st.mdp"
-  # tinker specific
-  "amber99.prm"
-  "tinker.sh"
   "$(basename "$INPUT_PDB")"
   "$(basename "$TOPDIR")"
 )
@@ -67,7 +55,7 @@ move_everything_except_whitelist() {
   done
 }
 
-pushd "$INPUT_DIR" >/dev/null
+cd "$INPUT_DIR"
 
 current_in="$INPUT_PDB"
 
@@ -83,7 +71,6 @@ for i in {1..5}; do
 
   if [[ ! -f "$pass_out" ]]; then
     echo "Error: expected pass output not found: $pass_out" >&2
-    popd >/dev/null
     exit 1
   fi
 
@@ -96,11 +83,13 @@ for i in {1..5}; do
 
   if [[ ! -f "filtered_renum.pdb" ]]; then
     echo "Error: expected MM output not found: filtered_renum.pdb" >&2
-    popd >/dev/null
     exit 1
   fi
 
   cp -f -- "filtered_renum.pdb" "$mm_out"
+
+  # KEEP the next input file in the working dir
+  WHITELIST+=("$mm_out")
 
   move_everything_except_whitelist "$run_dir"
 
@@ -109,5 +98,4 @@ for i in {1..5}; do
   current_in="$mm_out"
 done
 
-popd >/dev/null
 echo "Done. Results are under: $TOPDIR/{1..5}/"
