@@ -66,7 +66,6 @@ for i in {1..5}; do
   pass_out="${current_in%.pdb}_1WAT.pdb"
   mm_out="${current_in%.pdb}_1WAT_mm.pdb"
 
-  #echo "[run $i] pass \"$current_in\" 1.8 3.5 1  (expect: $pass_out)"
   pass "$current_in" 1.8 3.5 1
 
   if [[ ! -f "$pass_out" ]]; then
@@ -78,7 +77,6 @@ for i in {1..5}; do
   rm -f -- filtered_renum.pdb
 
   # run mm
-  #echo "[run $i] mm_minim.sh \"$pass_out\"" OUTDATED
   run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR"
 
   if [[ ! -f "filtered_renum.pdb" ]]; then
@@ -88,8 +86,10 @@ for i in {1..5}; do
 
   cp -f -- "filtered_renum.pdb" "$mm_out"
 
-  # KEEP the next input file in the working dir
-  WHITELIST+=("$mm_out")
+  # KEEP the next input file in the working dir, unless last run
+  if [[ $i -ne 5 ]]; then
+    WHITELIST+=("$mm_out")
+  fi
 
   move_everything_except_whitelist "$run_dir"
 
