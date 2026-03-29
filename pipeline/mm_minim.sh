@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INPUT_PDB="$1"
 INPUT_ABS="$(cd -P "$(dirname "$INPUT_PDB")" && pwd)/$(basename "$INPUT_PDB")"
 INPUT_DIR="$(dirname "$INPUT_ABS")"
+touch "${INPUT_DIR}/GROMACS.protocol"
 
 # --- TIMER SETUP ---
 SECONDS=0
