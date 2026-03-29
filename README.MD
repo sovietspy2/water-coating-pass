@@ -37,6 +37,8 @@ Runs:
 - python
 - linux
 - C compiler
+- tinker installed and on path
+- gromacs installed and on path
 
 ## Acknowledgments
 
