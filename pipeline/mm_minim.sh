@@ -25,6 +25,8 @@ write_runtime() {
 }
 trap write_runtime EXIT
 
+cd "$INPUT_DIR"
+
 # --- 1. SETUP ---
 # Generate topology (topol.top) and initial structure (conf.gro)
 gmx pdb2gmx -water tip3p -ff amber99sb-ildn -ignh -f "$INPUT_ABS" -o conf.gro

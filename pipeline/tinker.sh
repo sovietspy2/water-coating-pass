@@ -20,7 +20,7 @@ cp -f -- $SCRIPT_DIR/amber99.prm $INPUT_DIR/amber99.prm
 echo "${INPUT_DIR}/${PDB_NAME}.xyz"
 
 SECONDS=0
-TIMEFILE="${PDB_NAME}-mm-process-time.txt"
+TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
 
 write_runtime() {
   printf 'runtime for mm is %s seconds\n' "$SECONDS" > "$TIMEFILE"

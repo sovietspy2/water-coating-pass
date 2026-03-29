@@ -25,20 +25,21 @@ INPUT_DIR="$(dirname "$INPUT_PDB")"
 BASE="$(basename "${INPUT_PDB%.pdb}")"
 WAT_PDB="${INPUT_DIR}/${BASE}_5WAT.pdb"
 
-# ---- 1) Run pass: creates/uses *_5WAT.pdb as you specified ----
-# You said: pass INPUT_PDB_5WAT.pdb 1.8 3.5 5
-# If pass actually needs the original input too, tell me and I’ll adjust.
+# ---- 1) Run pass----
 pass "$INPUT_PDB" 1.8 3.5 5
 
 # ---- 2) Run minimization once with INPUT_PDB_5WAT ----
 run_mm_step "$MODE" "$WAT_PDB" "$SCRIPT_DIR"
 
-# ---- 3) Copy filtered_renum.pdb to BASE-FINAL.pdb ----
-if [[ ! -f "filtered_renum.pdb" ]]; then
+# ---- 3)
+if [[ ! -f "${INPUT_DIR}/filtered_renum.pdb" ]]; then
   echo "Error: filtered_renum.pdb not found after minimization" >&2
   exit 1
 fi
-cp -- "filtered_renum.pdb" "${WAT_PDB}-mm.pdb"
+
+WAT_BASE="$(basename "${WAT_PDB%.pdb}")"
+echo "Creating new file: ${WAT_BASE}-mm.pdb"
+cp -- "${INPUT_DIR}/filtered_renum.pdb" "${INPUT_DIR}/${WAT_BASE}-mm.pdb"
 
 # ---- 4) Move outputs into a folder named after INPUT_PDB (base) ----
 OUTDIR="$(make_output_dir "$INPUT_PDB" "5x1")"
@@ -73,4 +74,5 @@ done
 pattern="${pattern%|})"
 
 # Avoid moving the output directory into itself
+cd "$INPUT_DIR"
 mv -- $pattern "$OUTDIR"/
