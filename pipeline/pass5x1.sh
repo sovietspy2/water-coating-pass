@@ -48,19 +48,6 @@ mkdir -p -- "$OUTDIR"
 # Fill this whitelist later (exact filenames or glob patterns).
 # These names are excluded from moving.
 WHITELIST=(
-  "pass5x1.sh"
-  "pass5x5.sh"
-  "pipeline_common.sh"
-  # gromacs specific
-  "cleanup.sh"
-  "mm_minim.sh"
-  "gromacs-cg.mdp"
-  "gromacs-md.mdp"
-  "clean_pdb.py"
-  "gromacs-st.mdp"
-  # tinker specific
-  "amber99.prm"
-  "tinker.sh"
   "$BASE.pdb"
   "$(basename "$OUTDIR")"
 )
