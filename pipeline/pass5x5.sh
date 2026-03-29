@@ -32,6 +32,23 @@ WHITELIST=(
   "$(basename "$TOPDIR")"
 )
 
+LOGFILE="${TOPDIR}/application.LOG"
+: > "$LOGFILE"
+
+log() {
+  printf '[%s] %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOGFILE"
+}
+
+run_step() {
+  log "RUN: $*"
+  "$@"
+  local rc=$?
+  log "DONE (rc=$rc): $*"
+  return "$rc"
+}
+
+trap 'rc=$?; log "FAILED at line $LINENO with exit code $rc"; exit $rc' ERR
+
 move_everything_except_whitelist() {
   local target="$1"
   local item
@@ -50,52 +67,79 @@ move_everything_except_whitelist() {
     done
 
     if [[ "$skip" -eq 0 ]]; then
+      log "Moving: $item -> $target/"
       mv -- "$item" "$target"/
     fi
   done
 }
 
+log "Starting pass5x5"
+log "INPUT_PDB=$INPUT_PDB"
+log "MODE=$MODE"
+log "TOPDIR=$TOPDIR"
+
 cd "$INPUT_DIR"
+log "Working directory: $INPUT_DIR"
 
 current_in="$INPUT_PDB"
 
 for i in {1..5}; do
+  log "===== ITERATION $i/5 ====="
   run_dir="$TOPDIR/$i"
   mkdir -p -- "$run_dir"
+  log "Run directory: $run_dir"
 
   pass_out="${current_in%.pdb}_1WAT.pdb"
   mm_out="${current_in%.pdb}_1WAT_mm.pdb"
 
-  pass "$current_in" 1.8 3.5 1
+  log "Current input: $current_in"
+  log "Expected pass output: $pass_out"
+  log "Expected mm output: $mm_out"
+
+  run_step pass "$current_in" 1.8 3.5 1
 
   if [[ ! -f "$pass_out" ]]; then
-    echo "Error: expected pass output not found: $pass_out" >&2
+    log "ERROR: expected pass output not found: $pass_out"
     exit 1
   fi
+  log "Pass output found: $pass_out"
 
   # make sure there is no old filtered_renum.pdb present
   rm -f -- filtered_renum.pdb
+  log "Removed old filtered_renum.pdb if present"
 
   # run mm
-  run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR"
+  run_step run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR"
 
   if [[ ! -f "filtered_renum.pdb" ]]; then
-    echo "Error: expected MM output not found: filtered_renum.pdb" >&2
+    log "ERROR: expected MM output not found: filtered_renum.pdb"
     exit 1
   fi
+  log "MM output found: filtered_renum.pdb"
 
   cp -f -- "filtered_renum.pdb" "$mm_out"
+  log "Copied filtered_renum.pdb -> $mm_out"
 
   # KEEP the next input file in the working dir, unless last run
   if [[ $i -ne 5 ]]; then
     WHITELIST+=("$mm_out")
+    log "Added to whitelist for next iteration: $mm_out"
+  else
+    log "Last iteration: not adding $mm_out to whitelist"
   fi
 
   move_everything_except_whitelist "$run_dir"
 
+  if [[ ! -f "$run_dir/$(basename "$mm_out")" ]]; then
+    log "ERROR: expected file not found after move: $run_dir/$(basename "$mm_out")"
+    exit 1
+  fi
+
   cp -f -- "$run_dir/$(basename "$mm_out")" .
+  log "Copied next input back into working dir: $(basename "$mm_out")"
 
   current_in="$mm_out"
+  log "Next iteration input set to: $current_in"
 done
 
-echo "Done. Results are under: $TOPDIR/{1..5}/"
+log "Done. Results are under: $TOPDIR/{1..5}/"
