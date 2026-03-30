@@ -26,7 +26,7 @@ touch "${INPUT_DIR}/TINKER.protocol"
 log "Created TINKER.protocol file"
 
 # Reformatting PDB so tinker can use it
-log "Step 1: Running tinker-pdb-converter"
+log "Step 1: Running tinker-pdb-converter, reformatting numbers"
 run_step "$SCRIPT_DIR"/tinker-pdb-converter.sh "$INPUT_PDB"
 
 log "Step 2: Copying amber99.prm to input directory"
@@ -55,7 +55,7 @@ EOF
 
 # --- 1. SETUP --- B FALLBACK
 #log "Step 3: Running pdbxyz (PDB to XYZ conversion) B VERSION"
-#run_step pdbxyz "$INPUT_PDB" <<EOF
+# pdbxyz "$INPUT_PDB" <<EOF
 #ALL
 #0
 #amber99.prm
@@ -88,7 +88,7 @@ log "Appended PARAMETERS, RATTLE, and cutoff settings to key.key"
 # --- 4. DYNAMICS ---
 log "Step 6: Running dynamic (molecular dynamics simulation)"
 run_step dynamic "${INPUT_DIR}/${PDB_NAME}".xyz_2 -k "$INPUT_DIR/key.key" <<EOF
-100000
+10000
 1.0
 10
 2

@@ -70,6 +70,9 @@ log "TOPDIR=$TOPDIR"
 cd "$INPUT_DIR"
 log "Working directory: $INPUT_DIR"
 
+log "Step 0: Removing multiple models from PDB, keeping the first one."
+run_step "$SCRIPT_DIR"/model-reducer.sh "$INPUT_PDB"
+
 current_in="$INPUT_PDB"
 
 for i in {1..5}; do

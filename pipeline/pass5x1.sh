@@ -36,6 +36,10 @@ log "MODE=$MODE"
 log "INPUT_DIR=$INPUT_DIR"
 log "WAT_PDB=$WAT_PDB"
 
+
+log "Step 0:removing multiple models from PDB, keeping the first one."
+run_step "$SCRIPT_DIR"/model-reducer.sh "$INPUT_PDB"
+
 # ---- 1) Run pass----
 log "Step 1: running pass"
 run_step pass "$INPUT_PDB" 1.8 3.5 5
