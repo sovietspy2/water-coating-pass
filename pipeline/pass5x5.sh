@@ -30,22 +30,11 @@ mkdir -p -- "$TOPDIR"
 WHITELIST=(
   "$(basename "$INPUT_PDB")"
   "$(basename "$TOPDIR")"
+  "application.LOG"
 )
 
-LOGFILE="${TOPDIR}/application.LOG"
-: > "$LOGFILE"
-
-log() {
-  printf '[%s] %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOGFILE"
-}
-
-run_step() {
-  log "RUN: $*"
-  "$@"
-  local rc=$?
-  log "DONE (rc=$rc): $*"
-  return "$rc"
-}
+LOGFILE="${INPUT_DIR}/application.LOG"
+setup_logging "$LOGFILE"
 
 trap 'rc=$?; log "FAILED at line $LINENO with exit code $rc"; exit $rc' ERR
 

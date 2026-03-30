@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# Usage: ./run_pipeline.sh INPUT_PDB MODE
-# Example: ./run_pipeline.sh /abs/path/ASD.pdb gromacs
+# Usage: ./pass5x1.sh INPUT_PDB MODE
+# Example: ./pass5x1.sh /abs/path/ASD.pdb gromacs
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
@@ -26,23 +26,11 @@ BASE="$(basename "${INPUT_PDB%.pdb}")"
 WAT_PDB="${INPUT_DIR}/${BASE}_5WAT.pdb"
 
 LOGFILE="${INPUT_DIR}/application.LOG"
-: > "$LOGFILE"
-
-log() {
-  printf '[%s] %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOGFILE"
-}
-
-run_step() {
-  log "RUN: $*"
-  "$@"
-  local rc=$?
-  log "DONE (rc=$rc): $*"
-  return "$rc"
-}
+setup_logging "$LOGFILE"
 
 trap 'rc=$?; log "FAILED at line $LINENO with exit code $rc"; exit $rc' ERR
 
-log "Starting run_pipeline"
+log "Starting pass5x1"
 log "INPUT_PDB=$INPUT_PDB"
 log "MODE=$MODE"
 log "INPUT_DIR=$INPUT_DIR"
@@ -83,6 +71,7 @@ log "Output directory: $OUTDIR"
 WHITELIST=(
   "$BASE.pdb"
   "$(basename "$OUTDIR")"
+  "application.LOG"
 )
 
 log "Whitelist entries: ${WHITELIST[*]}"
@@ -106,4 +95,3 @@ mv -- $pattern "$OUTDIR"/
 log "Move completed"
 
 log "Done. Results are under: $OUTDIR"
-```
