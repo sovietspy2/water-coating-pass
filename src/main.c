@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
     strncpy(g_ref_name, file, MAX_FILENAME_LENGTH - 1);
     g_ref_name[MAX_FILENAME_LENGTH - 1] = '\0';
 
-    g_pdb_ref = read_in_pdb(g_ref_name, &g_pdb_ref_no, 1);
+    g_pdb_ref = read_in_pdb(g_ref_name, &g_pdb_ref_no, -1);
     if (!g_pdb_ref || g_pdb_ref_no <= 0) {
         fprintf(stderr, "Hiba: PDB beolvasas sikertelen vagy ures.\n");
         return 1;
