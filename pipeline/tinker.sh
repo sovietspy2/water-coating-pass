@@ -27,7 +27,7 @@ log "Created TINKER.protocol file"
 
 # Reformatting PDB so tinker can use it
 log "Step 1: Changing pdb format to fit tinker requirements"
-run_step "$SCRIPT_DIR"/tinker-pdb-converter.sh "$INPUT_PDB"
+run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_PDB"
 
 log "Step 2: Copying amber99.prm to input directory"
 cp -f -- $SCRIPT_DIR/amber99.prm $INPUT_DIR/amber99.prm
@@ -79,7 +79,7 @@ log "Appended PARAMETERS, RATTLE, and cutoff settings to key.key"
 # --- 4. DYNAMICS ---
 log "Step 6: Running dynamic (molecular dynamics simulation)"
 run_step dynamic "${INPUT_DIR}/${PDB_NAME}".xyz_2 -k "$INPUT_DIR/key.key" <<EOF
-100000
+10000
 1.0
 10
 2
@@ -97,5 +97,8 @@ log "Step 8: Preparing final output"
 OUT="${INPUT_DIR}/filtered_renum.pdb"
 cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_2" "$OUT"
 log "Copied final structure to filtered_renum.pdb"
+
+log "Step 9: Post processing PDB"
+run_step "$SCRIPT_DIR"/format-pdb.sh.sh "$INPUT_PDB"
 
 log "tinker.sh completed successfully"

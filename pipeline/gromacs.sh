@@ -42,6 +42,9 @@ trap write_runtime EXIT
 cd "$INPUT_DIR"
 log "Changed working directory to: $INPUT_DIR"
 
+log "Step 0: Reformatting PDB"
+run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_PDB"
+
 # --- 1. SETUP ---
 log "Step 1: Running pdb2gmx (generate topology and initial structure)"
 run_step gmx pdb2gmx -water tip3p -ff amber99sb-ildn -ignh -f "$INPUT_ABS" -o conf.gro
@@ -92,5 +95,8 @@ EOF
 
 log "Step 7: Removing extra waters not connected to protein"
 run_step python "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb"
+
+log "Step 8: Post processing PDB"
+run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_PDB"
 
 log "gromacs.sh completed successfully"
