@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<USAGE
-Usage: $(basename "$0") INPUT_PDB [OUTPUT_PDB] [LOG_FILE]
+Usage: $(basename "$0") INPUT_PDB [LOG_FILE]
 
 Rewrites a PDB file to:
   1. Remove rows that start with CONECT
@@ -14,8 +14,9 @@ Rewrites a PDB file to:
   6. Renumber ATOM serials so they increment by 1
 
 Defaults:
-  OUTPUT_PDB = <input_basename>.fixed.pdb
-  LOG_FILE   = <output_basename>.log
+  OUTPUT_PDB = overwrite INPUT_PDB
+  BACKUP_PDB = <input_basename>.original.pdb
+  LOG_FILE   = <input_basename>.log
 USAGE
 }
 
@@ -24,7 +25,7 @@ if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
   exit 0
 fi
 
-if [[ $# -lt 1 || $# -gt 3 ]]; then
+if [[ $# -lt 1 || $# -gt 2 ]]; then
   usage >&2
   exit 1
 fi
@@ -35,21 +36,30 @@ if [[ ! -f "$input" ]]; then
   exit 1
 fi
 
-if [[ $# -ge 2 ]]; then
-  output=$2
+input_dir=$(dirname -- "$input")
+input_name=$(basename -- "$input")
+
+if [[ $input_name == *.pdb ]]; then
+  input_stem=${input_name%.pdb}
+  backup="$input_dir/${input_stem}.original.pdb"
 else
-  base=${input##*/}
-  base=${base%.*}
-  output="${base}.fixed.pdb"
+  input_stem=$input_name
+  backup="$input.original.pdb"
 fi
 
-if [[ $# -ge 3 ]]; then
-  logfile=$3
+output="$input"
+
+if [[ $# -ge 2 ]]; then
+  logfile=$2
 else
-  outbase=${output##*/}
-  outbase=${outbase%.*}
-  logfile="${outbase}.log"
+  logfile="$input_dir/${input_stem}.log"
 fi
+
+tmp_output=$(mktemp)
+cleanup() {
+  rm -f -- "$tmp_output"
+}
+trap cleanup EXIT
 
 awk -v log_file="$logfile" '
 function trim(s) {
@@ -234,7 +244,14 @@ END {
   print "Serial fixes            : " serial_fixed >> log_file
   print "Total rows changed      : " total_changed >> log_file
 }
-' "$input" > "$output"
+' "$input" > "$tmp_output"
+
+if [[ -e "$backup" ]]; then
+  rm -f -- "$backup"
+fi
+mv -- "$input" "$backup"
+mv -- "$tmp_output" "$output"
 
 echo "Wrote cleaned PDB to: $output"
+echo "Original PDB backed up to: $backup"
 echo "Wrote log to: $logfile"
