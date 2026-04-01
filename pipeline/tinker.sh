@@ -26,7 +26,7 @@ touch "${INPUT_DIR}/TINKER.protocol"
 log "Created TINKER.protocol file"
 
 # Reformatting PDB so tinker can use it
-log "Step 1: Running tinker-pdb-converter, reformatting numbers"
+log "Step 1: Changing pdb format to fit tinker requirements"
 run_step "$SCRIPT_DIR"/tinker-pdb-converter.sh "$INPUT_PDB"
 
 log "Step 2: Copying amber99.prm to input directory"
@@ -51,15 +51,6 @@ run_step pdbxyz "$INPUT_PDB" <<EOF
 ALL
 amber99.prm
 EOF
-
-
-# --- 1. SETUP --- B FALLBACK
-#log "Step 3: Running pdbxyz (PDB to XYZ conversion) B VERSION"
-# pdbxyz "$INPUT_PDB" <<EOF
-#ALL
-#0
-#amber99.prm
-#EOF
 
 # --- 2. MINIMIZATION ---
 log "Step 4: Running minimize (energy minimization)"
