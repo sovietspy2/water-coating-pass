@@ -20,7 +20,7 @@ INPUT_DIR="$(dirname "$INPUT_ABS")"
 LOGFILE="${INPUT_DIR}/application.LOG"
 setup_logging $LOGFILE
 
-log "Starting mm_minim.sh (GROMACS mode)"
+log "Starting gromacs.sh (GROMACS mode)"
 log "INPUT_PDB=$INPUT_PDB"
 log "INPUT_ABS=$INPUT_ABS"
 log "INPUT_DIR=$INPUT_DIR"
@@ -93,4 +93,4 @@ EOF
 log "Step 7: Removing extra waters not connected to protein"
 run_step python "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb"
 
-log "mm_minim.sh completed successfully"
+log "gromacs.sh completed successfully"

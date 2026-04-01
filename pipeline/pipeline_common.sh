@@ -82,7 +82,7 @@ run_mm_step() {
 
   case "$mode" in
     gromacs)
-      "$script_dir/mm_minim.sh" "$input_pdb"
+      "$script_dir/gromacs.sh" "$input_pdb"
       ;;
     tinker)
       "$script_dir/tinker.sh" "$input_pdb"
