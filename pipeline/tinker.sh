@@ -79,7 +79,7 @@ log "Appended PARAMETERS, RATTLE, and cutoff settings to key.key"
 # --- 4. DYNAMICS ---
 log "Step 6: Running dynamic (molecular dynamics simulation)"
 run_step dynamic "${INPUT_DIR}/${PDB_NAME}".xyz_2 -k "$INPUT_DIR/key.key" <<EOF
-10000
+100000
 1.0
 10
 2
