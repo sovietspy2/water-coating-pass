@@ -75,8 +75,6 @@ log "Step 5: Running mdrun for molecular dynamics"
 run_step gmx mdrun -v -s md -o md.trr -c after_md.gro -g md.log
 
 # --- 6. POST-PROCESSING (Cleaning up the trajectory) ---
-log "Step 6: Post-processing - correcting for artificial PBC due to large box"
-
 log "Step 6a: Running trjconv for PBC correction (pbc whole)"
 run_step gmx trjconv -f md.trr -s md.tpr -o pbc_whole.xtc -pbc whole <<EOF
 0
@@ -93,10 +91,12 @@ run_step gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b 10
 0
 EOF
 
+# input: lastframe_drop.pdb output: filtered_renum.pdb
+# Removing waters too far away from protein
 log "Step 7: Removing extra waters not connected to protein"
 run_step python "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb"
 
 log "Step 8: Post processing PDB"
-run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_DIR/lastframe_drop.pdb"
+run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_DIR/filtered_renum.pdb"
 
 log "gromacs.sh completed successfully"

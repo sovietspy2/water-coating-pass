@@ -7,9 +7,9 @@ Usage: $(basename "$0") INPUT_PDB [LOG_FILE]
 
 Rewrites a PDB file to:
   1. Remove rows that start with CONECT
-  2. Remove rows containing HW
+  2. Remove rows containing HW or HW1 or HW2
   3. Rename OW to O in atom-name field
-  4. Replace residue names 001 or 002 with WAT
+  4. Replace residue names 001 or 002 or SOL with WAT
   5. Rename HETATM to ATOM
   6. Renumber ATOM serials so they increment by 1
 
@@ -134,6 +134,18 @@ BEGIN {
     next
   }
 
+  if (index($0, "HW1") > 0) {
+    removed_hw++
+    log_change("REMOVED", NR, "-", "row contains HW", $0, "")
+    next
+  }
+
+  if (index($0, "HW2") > 0) {
+    removed_hw++
+    log_change("REMOVED", NR, "-", "row contains HW", $0, "")
+    next
+  }
+
   record = substr($0, 1, 6)
   is_atom = (record == "ATOM  " || record == "HETATM")
 
@@ -179,7 +191,7 @@ BEGIN {
     row_changes = row_changes "OW->O; "
   }
 
-  if (new_res_trim == "001" || new_res_trim == "002") {
+  if (new_res_trim == "001" || new_res_trim == "002" || new_res_trim == "SOL") {
     new_res_trim = "WAT"
     res_to_wat++
     row_changed = 1
