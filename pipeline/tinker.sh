@@ -99,6 +99,6 @@ cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_2" "$OUT"
 log "Copied final structure to filtered_renum.pdb"
 
 log "Step 9: Post processing PDB"
-run_step "$SCRIPT_DIR"/format-pdb.sh.sh "$INPUT_PDB"
+run_step "$SCRIPT_DIR"/filtered_renum.pdb "$INPUT_PDB"
 
 log "tinker.sh completed successfully"

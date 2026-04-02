@@ -97,6 +97,6 @@ log "Step 7: Removing extra waters not connected to protein"
 run_step python "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb"
 
 log "Step 8: Post processing PDB"
-run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_PDB"
+run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_DIR/lastframe_drop.pdb"
 
 log "gromacs.sh completed successfully"
