@@ -22,6 +22,16 @@ log "INPUT_PDB=$INPUT_PDB"
 log "INPUT_DIR=$INPUT_DIR"
 log "PDB_NAME=$PDB_NAME"
 
+SECONDS=0
+TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
+
+write_runtime() {
+  printf 'runtime for mm is %s seconds\n' "$SECONDS" > "$TIMEFILE"
+  log "Runtime written to $TIMEFILE: $SECONDS seconds"
+}
+
+trap write_runtime EXIT
+
 touch "${INPUT_DIR}/TINKER.protocol"
 log "Created TINKER.protocol file"
 
@@ -34,16 +44,6 @@ cp -f -- $SCRIPT_DIR/amber99.prm $INPUT_DIR/amber99.prm
 log "Copied amber99.prm to $INPUT_DIR/"
 
 log "Generated XYZ file: ${INPUT_DIR}/${PDB_NAME}.xyz"
-
-SECONDS=0
-TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
-
-write_runtime() {
-  printf 'runtime for mm is %s seconds\n' "$SECONDS" > "$TIMEFILE"
-  log "Runtime written to $TIMEFILE: $SECONDS seconds"
-}
-
-trap write_runtime EXIT
 
 # --- 1. SETUP --- A
 log "Step 3: Running pdbxyz (PDB to XYZ conversion) A VERSION"
@@ -99,6 +99,6 @@ cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_2" "$OUT"
 log "Copied final structure to filtered_renum.pdb"
 
 log "Step 9: Post processing PDB"
-run_step "$SCRIPT_DIR"/filtered_renum.pdb "$INPUT_PDB"
+run_step "$SCRIPT_DIR"/format-pdb.sh.sh "${INPUT_DIR}/filtered_renum.pdb"
 
 log "tinker.sh completed successfully"
