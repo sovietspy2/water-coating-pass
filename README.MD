@@ -26,6 +26,8 @@ Example:
 ./pass.sh /abs/path/FFF.pdb gromacs LONG
 ```
 
+Note: The input PDB must be placed in a separate work directory outside of the project. 
+
 ## Arguments
 
 - `INPUT_PDB` — Absolute or relative path to an input `.pdb` file.
