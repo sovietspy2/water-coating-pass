@@ -137,6 +137,7 @@ log "INPUT_PDB=$INPUT_PDB"
 log "MODE=$MODE"
 log "RUN_TYPE=$RUN_TYPE"
 log "INPUT_DIR=$INPUT_DIR"
+validate_script_dir_not_input_dir "$1"
 
 log "Step 0: removing multiple models from PDB, keeping the first one."
 run_step "$SCRIPT_DIR"/model-reducer.sh "$INPUT_PDB"

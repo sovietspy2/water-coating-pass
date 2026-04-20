@@ -25,6 +25,25 @@ make_output_dir() {
   printf '%s/%s%s\n' "$(dirname "$input_abs")" "$base_name" "$suffix"
 }
 
+validate_script_dir_not_input_dir() {
+  local input_path="$1"
+  local input_dir_candidate
+  local input_dir_real
+  local SCRIPT_DIR_VAR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  input_dir_candidate="$(dirname -- "$input_path")"
+
+  if [[ -d "$input_dir_candidate" ]]; then
+    input_dir_real="$(cd -P "$input_dir_candidate" && pwd)"
+
+    if [[ "$SCRIPT_DIR_VAR" == "$input_dir_real" ]]; then
+      log "Error: pass.sh cannot be located in the same directory as INPUT_PDB." >&2
+      log "Move the input PDB to a different folder!" >&2
+      exit 1
+    fi
+  fi
+}
+
 # ============================================================================
 # LOGGING FUNCTIONS
 # ============================================================================
