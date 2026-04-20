@@ -23,11 +23,10 @@ The project includes user-facing pipeline script in `pipeline/`:
 Example:
 
 ```bash
-./pass.sh /abs/path/FFF.pdb gromacs LONG
+./pass.sh /tmp/working_dir/1PSV.pdb gromacs LONG
 ```
 
-Note: The input PDB must be placed in a separate work directory outside of the project. 
-
+Note: Place the input PDB in its own working directory located outside the project folder. The working directory should contain only that PDB file.
 ## Arguments
 
 - `INPUT_PDB` — Absolute or relative path to an input `.pdb` file.
@@ -90,7 +89,7 @@ The script exits immediately on error and writes a failure message to the log wi
 
 ## Acknowledgments
 
-This project reuses code from **MobyWat** (http://www.mobywat.com).]()
+This project reuses code from **MobyWat** http://www.mobywat.com.
 
 
 
