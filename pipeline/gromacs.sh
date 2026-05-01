@@ -7,7 +7,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 command -v gmx >/dev/null || { echo "Error: gmx not found" >&2; exit 1; }
-command -v python >/dev/null || { echo "Error: python not found" >&2; exit 1; }
+command -v python3 >/dev/null || { echo "Error: python not found" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
@@ -94,7 +94,7 @@ EOF
 # input: lastframe_drop.pdb output: filtered_renum.pdb
 # Removing waters too far away from protein
 log "Step 7: Removing extra waters not connected to protein"
-run_step python "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb"
+run_step python3 "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb"
 
 log "Step 8: Post processing PDB"
 run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_DIR/filtered_renum.pdb"
