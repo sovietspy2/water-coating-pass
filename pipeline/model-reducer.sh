@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Reduce a multi-model PDB to its first model only, safely.
 # - Creates: input.pdb.multimodel.orig
 # - Rewrites: input.pdb
@@ -9,10 +9,9 @@
 # - Writes exactly one final END record
 # - Refuses malformed MODEL/ENDMDL structure
 
-set -eu
+set -euo pipefail
 umask 077
-LC_ALL=C
-export LC_ALL
+export LC_ALL=C
 
 usage() {
     printf 'Usage: %s <file.pdb>\n' "$0" >&2
@@ -25,34 +24,14 @@ fail() {
 }
 
 cleanup() {
-    [ -n "${tmp-}" ] && [ -e "$tmp" ] && rm -f "$tmp"
-}
-
-make_tmp() {
-    dir=$1
-    base=$2
-
-    if command -v mktemp >/dev/null 2>&1; then
-        mktemp "$dir/.${base}.tmp.XXXXXX"
-        return
+    if [[ -n "${tmp-}" && -e "${tmp-}" ]]; then
+        rm -f "$tmp"
     fi
-
-    i=0
-    while [ "$i" -lt 100 ]; do
-        cand=$dir/.${base}.tmp.$$.${i}
-        if ( set -C; : > "$cand" ) 2>/dev/null; then
-            printf '%s\n' "$cand"
-            return
-        fi
-        i=$((i + 1))
-    done
-
-    return 1
 }
 
 count_records() {
-    file=$1
-    name=$2
+    local file="$1"
+    local name="$2"
     awk -v want="$name" '
         {
             sub(/\r$/, "", $0)
@@ -64,37 +43,39 @@ count_records() {
     ' "$file"
 }
 
-[ "$#" -eq 1 ] || usage
+[[ $# -eq 1 ]] || usage
 
-pdb=$1
-[ -f "$pdb" ] || fail "File not found: $pdb"
-[ -r "$pdb" ] || fail "File not readable: $pdb"
-[ -w "$pdb" ] || fail "File not writable: $pdb"
+pdb="$1"
+[[ -f "$pdb" ]] || fail "File not found: $pdb"
+[[ -r "$pdb" ]] || fail "File not readable: $pdb"
+[[ -w "$pdb" ]] || fail "File not writable: $pdb"
 
-model_count=$(count_records "$pdb" MODEL) || fail "Could not scan MODEL records"
-endmdl_count=$(count_records "$pdb" ENDMDL) || fail "Could not scan ENDMDL records"
+model_count=$(count_records "$pdb" MODEL)
+endmdl_count=$(count_records "$pdb" ENDMDL)
 
-if [ "$model_count" -eq 0 ]; then
+if [[ "$model_count" -eq 0 ]]; then
     printf 'No MODEL records found; file left unchanged: %s\n' "$pdb"
     exit 0
 fi
 
-if [ "$model_count" -eq 1 ]; then
+if [[ "$model_count" -eq 1 ]]; then
     printf 'Only one MODEL record found; file left unchanged: %s\n' "$pdb"
     exit 0
 fi
 
-[ "$endmdl_count" -eq "$model_count" ] || fail \
+[[ "$endmdl_count" -eq "$model_count" ]] || fail \
     "Malformed PDB: MODEL/ENDMDL count mismatch ($model_count MODEL, $endmdl_count ENDMDL)"
 
 backup="${pdb}.multimodel.orig"
-[ ! -e "$backup" ] || fail "Backup already exists: $backup"
+if [[ -e "$backup" ]]; then
+    printf 'Warning: backup already exists, overwriting: %s\n' "$backup" >&2
+fi
 
 cp "$pdb" "$backup" || fail "Could not create backup: $backup"
 
 dir=$(dirname "$pdb")
 base=$(basename "$pdb")
-tmp=$(make_tmp "$dir" "$base") || fail "Could not create temporary file"
+tmp=$(mktemp "$dir/.${base}.tmp.XXXXXX") || fail "Could not create temporary file"
 
 trap cleanup EXIT HUP INT TERM
 
@@ -284,7 +265,6 @@ END {
 
 mv "$tmp" "$pdb" || fail "Failed to replace original PDB"
 trap - EXIT HUP INT TERM
-cleanup
 
 printf 'Backup created: %s\n' "$backup"
 printf 'Updated file:   %s\n' "$pdb"
