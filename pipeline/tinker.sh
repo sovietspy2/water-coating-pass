@@ -86,9 +86,31 @@ run_step dynamic "${INPUT_DIR}/${PDB_NAME}".xyz_2 -k "$INPUT_DIR/key.key" <<EOF
 300
 EOF
 
+# Extracting last frame of .arc file
+NATOMS=$(awk 'NR==1 {print $1; exit}' "$ARC")
+SECOND_FIRST=$(awk 'NR==2 {print $1; exit}' "$ARC")
+TOTAL_LINES=$(wc -l < "$ARC" | tr -d ' ')
+
+case "$SECOND_FIRST" in
+    *[!0-9]* ) LINES_PER_FRAME=$((NATOMS + 2)) ;;
+    * )        LINES_PER_FRAME=$((NATOMS + 1)) ;;
+esac
+
+LAST_FRAME_NUMBER=$((TOTAL_LINES / LINES_PER_FRAME))
+log "Last frame in .arc file is ${LAST_FRAME}"
+
+run_step arcedit"${INPUT_DIR}/${PDB_NAME}.arc" <<EOF
+2
+${LAST_FRAME_NUMBER} ${LAST_FRAME_NUMBER} 1
+
+EOF
+
+LAST_FRAME="${INPUT_DIR}/${PDB_NAME}.0${LAST_FRAME_NUMBER}"
+log "Expected single frame arc file is: ${}"
+
 # --- 5. CONVERT BACK TO PDB ---
 log "Step 7: Running xyzpdb (converting trajectory arc to PDB)"
-run_step xyzpdb "${INPUT_DIR}/${PDB_NAME}.arc" <<EOF
+run_step xyzpdb ${LAST_FRAME} <<EOF
 amber99.prm
 PDB
 EOF
