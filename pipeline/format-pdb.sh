@@ -7,11 +7,10 @@ Usage: $(basename "$0") INPUT_PDB [LOG_FILE]
 
 Rewrites a PDB file to:
   1. Remove rows that start with CONECT
-  2. Remove rows containing HW or HW1 or HW2
-  3. Rename OW to O in atom-name field
-  4. Replace residue names 001 or 002 or SOL with WAT
-  5. Rename HETATM to ATOM
-  6. Renumber ATOM serials so they increment by 1
+  2. Rename OW to O in atom-name field
+  3. Replace residue names 001 or 002 or SOL with WAT
+  4. Rename HETATM to ATOM
+  5. Renumber ATOM serials so they increment by 1
 
 Defaults:
   OUTPUT_PDB = overwrite INPUT_PDB
@@ -105,7 +104,6 @@ function log_change(kind, input_line, out_serial, msg, before, after) {
 
 BEGIN {
   removed_conect = 0
-  removed_hw = 0
   changed_rows = 0
   hetatm_to_atom = 0
   ow_to_o = 0
@@ -125,24 +123,6 @@ BEGIN {
   if ($0 ~ /^CONECT/) {
     removed_conect++
     log_change("REMOVED", NR, "-", "row starts with CONECT", $0, "")
-    next
-  }
-
-  if (index($0, "HW") > 0) {
-    removed_hw++
-    log_change("REMOVED", NR, "-", "row contains HW", $0, "")
-    next
-  }
-
-  if (index($0, "HW1") > 0) {
-    removed_hw++
-    log_change("REMOVED", NR, "-", "row contains HW", $0, "")
-    next
-  }
-
-  if (index($0, "HW2") > 0) {
-    removed_hw++
-    log_change("REMOVED", NR, "-", "row contains HW", $0, "")
     next
   }
 
@@ -241,14 +221,13 @@ BEGIN {
 }
 
 END {
-  total_changed = removed_conect + removed_hw + changed_rows
+  total_changed = removed_conect + changed_rows
   print "" >> log_file
   print "Summary" >> log_file
   print "-------" >> log_file
   print "Total input rows        : " total_input_rows >> log_file
   print "Output atom rows        : " output_atom_rows >> log_file
   print "Removed CONECT rows     : " removed_conect >> log_file
-  print "Removed HW rows         : " removed_hw >> log_file
   print "Changed output rows     : " changed_rows >> log_file
   print "HETATM -> ATOM changes  : " hetatm_to_atom >> log_file
   print "OW -> O changes         : " ow_to_o >> log_file
