@@ -53,7 +53,7 @@ EOF
 log "Generated XYZ file: ${INPUT_DIR}/${PDB_NAME}.xyz"
 
 log "Fixing PDB to XYZ conversion issues via Python. Dropping duplicate entries or colliding atoms."
-run_step python3 tinker_xyz_fix.py "${INPUT_DIR}/${PDB_NAME}.xyz"
+run_step python3 "$SCRIPT_DIR/tinker_xyz_fix.py" "${INPUT_DIR}/${PDB_NAME}.xyz"
 
 # 4) Minimization
 log "Step 4: Running minimize (energy minimization)"
