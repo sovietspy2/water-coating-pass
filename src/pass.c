@@ -6,7 +6,6 @@
 #include <stdio.h>
 
 #ifdef _OPENMP
-#include <omp.h>
 #endif
 
 #ifndef NEIGH_CAP
@@ -519,7 +518,7 @@ int pass_like_coating(
         vec3_list all_candidates = {0};
 
 
-        #pragma omp parallel
+
         {
             vec3_list local = {0};
 
@@ -529,7 +528,7 @@ int pass_like_coating(
             int *neigh = (int*)malloc((size_t)NEIGH_CAP * sizeof(int));
             double *neigh_d2 = (double*)malloc((size_t)NEIGH_CAP * sizeof(double));
 
-            #pragma omp for schedule(dynamic, 16)
+
             for (size_t a = 0; a + 2 < n_substrate; a++) {
                 vec3 i = pos[a];
                 double sigma_i = sig[a];
@@ -626,7 +625,7 @@ int pass_like_coating(
             free(neigh_d2);
             grid_pts_free(&local_ng);
 
-            #pragma omp critical
+
             {
                 for (size_t i = 0; i < local.n; i++) {
                     (void)v3list_push(&all_candidates, local.data[i]);
@@ -634,7 +633,7 @@ int pass_like_coating(
             }
 
             v3list_free(&local);
-        } /* omp parallel */
+        }
 
         for (size_t t = 0; t < all_candidates.n; t++) {
             vec3 p = all_candidates.data[t];
