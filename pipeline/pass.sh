@@ -118,11 +118,15 @@ case "$RUN_TYPE" in
     readonly ITERATIONS=5
     readonly WATERS_PER_PASS=1
     readonly OUTPUT_TAG="5x5"
+    readonly FINAL_MD_DURATION=1 #in ns
+    readonly INTERMEDIATE_MD_DURATION="0.1" # in ns
     ;;
   SHORT)
     readonly ITERATIONS=1
     readonly WATERS_PER_PASS=5
     readonly OUTPUT_TAG="5x1"
+    readonly FINAL_MD_DURATION=1 #in ns
+    readonly INTERMEDIATE_MD_DURATION=1 # in ns
     ;;
   *)
     echo "Error: invalid RUN_TYPE '$RUN_TYPE' (expected LONG or SHORT)" >&2
@@ -160,6 +164,14 @@ current_in="$INPUT_FILE"
 for ((i = 1; i <= ITERATIONS; i++)); do
   log "===== ITERATION $i/$ITERATIONS ====="
 
+  if (( i == ITERATIONS )); then
+    MD_DURATION=$FINAL_MD_DURATION
+    log "Iteration $i/$ITERATIONS: last iteration, md will run for $MD_DURATION nanosec"
+  else
+    MD_DURATION=$INTERMEDIATE_MD_DURATION
+    log "Iteration $i/$ITERATIONS: not last iteration, md will run for $MD_DURATION nanosec"
+  fi
+
   if [[ "$RUN_TYPE" == "LONG" ]]; then
     run_dir="$OUTPUT_ROOT/$i"
   else
@@ -168,7 +180,7 @@ for ((i = 1; i <= ITERATIONS; i++)); do
   mkdir -p -- "$run_dir"
   log "Run directory: $run_dir"
 
-  run_pass_and_mm "$current_in" "$WATERS_PER_PASS"
+  run_pass_and_mm "$current_in" "$WATERS_PER_PASS" "$MD_DURATION"
 
   move_everything_except "$run_dir" "${base_whitelist[@]}"
   require_file "$run_dir/$(basename "$LAST_MM_OUT")" "moved MM result"

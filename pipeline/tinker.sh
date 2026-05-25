@@ -4,6 +4,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
 
+ns_to_steps() {
+  local ns="${1:?usage: ns_to_steps <nanoseconds> [dt_fs]}"
+  local dt_fs="${2:-1.0}"
+
+  awk -v ns="$ns" -v dt="$dt_fs" 'BEGIN {
+    printf "%.0f\n", (ns * 1000000) / dt
+  }'
+}
+
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <input.pdb>" >&2
   exit 1
@@ -12,6 +21,7 @@ fi
 INPUT_PDB="$1"
 INPUT_DIR="$(dirname "$INPUT_PDB")"
 PDB_NAME="$(basename "${INPUT_PDB%.pdb}")"
+MD_DURATION="$2"
 
 # Setup logging in the INPUT_DIR (output directory)
 LOGFILE="${INPUT_DIR}/application.LOG"
@@ -21,6 +31,7 @@ log "Starting tinker.sh (TINKER mode)"
 log "INPUT_PDB=$INPUT_PDB"
 log "INPUT_DIR=$INPUT_DIR"
 log "PDB_NAME=$PDB_NAME"
+log "MD_DURATION=$MD_DURATION"
 
 SECONDS=0
 TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
@@ -79,9 +90,11 @@ EOF
 log "Appended PARAMETERS, RATTLE, and cutoff settings to key.key"
 
 # 6) Dynamics
+
+N_STEPS="$(ns_to_steps $MD_DURATION)"
 log "Step 6: Running dynamic (molecular dynamics simulation)"
 run_step dynamic "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "$INPUT_DIR/key.key" <<EOF
-100000
+${N_STEPS}
 1.0
 10
 2

@@ -1,6 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
+ns_to_nsteps() {
+  local ns="${1:?usage: ns_to_nsteps <ns>}"
+  local dt_ps="${2:-0.002}"
+
+  awk -v ns="$ns" -v dt="$dt_ps" 'BEGIN {
+    printf "%.0f", (ns * 1000) / dt
+  }'
+}
+
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <input.pdb>" >&2
   exit 1
@@ -15,6 +24,7 @@ source "$SCRIPT_DIR/pipeline_common.sh"
 INPUT_PDB="$1"
 INPUT_ABS="$(cd -P "$(dirname "$INPUT_PDB")" && pwd)/$(basename "$INPUT_PDB")"
 INPUT_DIR="$(dirname "$INPUT_ABS")"
+MD_DURATION="$2"
 
 # Setup logging in the INPUT_DIR (output directory)
 LOGFILE="${INPUT_DIR}/application.LOG"
@@ -24,6 +34,7 @@ log "Starting gromacs.sh (GROMACS mode)"
 log "INPUT_PDB=$INPUT_PDB"
 log "INPUT_ABS=$INPUT_ABS"
 log "INPUT_DIR=$INPUT_DIR"
+log "MD_DURATION=$MD_DURATION ns"
 
 touch "${INPUT_DIR}/GROMACS.protocol"
 log "Created GROMACS.protocol file"
@@ -172,8 +183,9 @@ log "Step 4: Running mdrun for conjugate gradient"
 run_step gmx mdrun -v -s cg -o cg.trr -c after_cg.gro -g cg.log
 
 # --- 5. MOLECULAR DYNAMICS (MD) ---
+STEPS="$(ns_to_nsteps $MD_DURATION)"
 log "Creating parameter file: gromacs-md.mdp"
-write_md_mdp 500000
+write_md_mdp $STEPS
 log "Step 5: Running grompp for molecular dynamics (using gromacs-md.mdp)"
 run_step gmx grompp -f "$INPUT_DIR/gromacs-md.mdp" -o md -c after_cg.gro -r after_cg.gro -p topol.top -maxwarn 1
 

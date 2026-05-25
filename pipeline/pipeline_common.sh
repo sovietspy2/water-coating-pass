@@ -87,13 +87,14 @@ run_mm_step() {
   local mode="$1"
   local input_pdb="$2"
   local script_dir="$3"
+  local md_duration="${4:-1}" # in nanosec, default 1
 
   case "$mode" in
     gromacs)
-      "$script_dir/gromacs.sh" "$input_pdb"
+      "$script_dir/gromacs.sh" "$input_pdb" "$md_duration"
       ;;
     tinker)
-      "$script_dir/tinker.sh" "$input_pdb"
+      "$script_dir/tinker.sh" "$input_pdb" "$md_duration"
       ;;
     *)
       echo "Error: unsupported mode: $mode (use gromacs or tinker)" >&2
