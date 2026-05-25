@@ -32,6 +32,106 @@ log "Created GROMACS.protocol file"
 SECONDS=0
 TIMEFILE="${INPUT_ABS}-mm-process-time.txt"
 
+## GROMACS parameter helpers
+
+write_cg_mdp() {
+  local outfile="$INPUT_DIR/gromacs-cg.mdp"
+  local nsteps="${1:-250000}"
+
+  cat > "$outfile" <<EOF
+; Modified gromacs-cg.mdp for Pseudo-PBC
+define              = -DPOSRES -DPOSRES_WATER
+constraints         = none
+integrator          = cg          ; Conjugate Gradient minimization
+nsteps              = ${nsteps}      ; Max steps
+nstlist             = 10
+cutoff-scheme       = Verlet
+ns_type             = simple      ; Use simple for minimization
+rlist               = 333.3       ; Large cutoff for vacuum
+coulombtype         = cutoff      ; Use cutoff with large radius for vacuum
+rcoulomb            = 333.3       ; Large cutoff for vacuum
+vdwtype             = cutoff      ; Use cutoff with large radius for vacuum
+rvdw                = 333.3       ; Large cutoff for vacuum
+emtol               = 750         ; Max force target
+emstep              = 0.01        ;
+EOF
+}
+
+write_md_mdp() {
+  local outfile="$INPUT_DIR/gromacs-md.mdp"
+  local nsteps="${1:-500000}" # default is total 1 ns.
+  local dt="${2:-0.002}"
+
+  cat > "$outfile" <<EOF
+; Modified gromacs-md.mdp for Pseudo-PBC
+cpp                 = /usr/bin/cpp
+define              = -DPOSRES
+constraints         = all-bonds
+integrator          = md
+dt                  = ${dt}
+nsteps              = ${nsteps}
+nstcomm             = 500
+nstxout             = 500
+nstvout             = 500
+nstlog              = 500
+nstenergy           = 500
+nstlist             = 10
+ns_type             = grid
+cutoff-scheme       = Verlet
+
+; Pseudo-PBC / Vacuum Settings
+coulombtype         = cutoff        ; Use cutoff for vacuum
+rlist               = 333.3         ; Large cutoff for vacuum
+rcoulomb            = 333.3         ; Large cutoff for vacuum
+rvdw                = 333.3         ; Large cutoff for vacuum
+
+; Temperature Coupling
+Tcoupl              = v-rescale
+tc-grps             = Protein non-Protein
+tau_t               = 0.1 0.1
+ref_t               = 300 300
+energygrps          = Protein non-Protein
+
+; NO Pressure Coupling for vacuum simulation
+
+gen_vel             = yes           ; Generate initial velocities
+gen_temp            = 300.0
+gen_seed            = 28480426
+EOF
+}
+
+write_st_mdp() {
+  local outfile="$INPUT_DIR/gromacs-st.mdp"
+  local nsteps="${1:-50000}"
+
+  cat > "$outfile" <<EOF
+; GROMACS Minimization in Vacuum (Pseudo-PBC)
+;
+define              = -DPOSRES -DPOSRES_WATER ; Use if you have position restraints
+integrator          = steep                    ; Steepest descent minimization
+nsteps              = ${nsteps}                    ; Max steps (use more than 50k for safety)
+
+; Neighbor searching parameters for pseudo-PBC
+nstlist             = 10
+cutoff-scheme       = Verlet
+ns_type             = simple                   ; Simpler neighbor search for EM
+rlist               = 333.3                    ; Neighbor list cutoff (must be large)
+
+; Electrostatics and VdW for vacuum
+coulombtype         = cutoff                   ; Simple cutoff
+rcoulomb            = 333.3                    ; Large cutoff simulates vacuum (must be < 0.5 * Box Vector)
+vdwtype             = cutoff                   ; Simple cutoff
+rvdw                = 333.3                    ; Large cutoff simulates vacuum
+
+; Energy minimizing settings
+emtol               = 200.0                    ; Stop when the maximum force is below 200 kJ/mol/nm
+emstep              = 0.01                     ; Initial step-size
+EOF
+}
+
+
+##
+
 write_runtime() {
   local elapsed="$SECONDS"
   printf 'runtime for mm is %s seconds\n' "$elapsed" > "$TIMEFILE"
@@ -54,22 +154,28 @@ log "Step 2: Running editconf (prepare large cubic box for pseudo-PBC)"
 run_step gmx editconf -f conf.gro -o conf_largebox.gro -c -d 0 -bt cubic -box 1000
 
 # --- 3. ENERGY MINIMIZATION (EM) ---
+log "Creating parameter file: gromacs-st.mdp"
+write_st_mdp
 log "Step 3: Running grompp for energy minimization (using gromacs-st.mdp)"
-run_step gmx grompp -v -f "$SCRIPT_DIR/gromacs-st.mdp" -c conf_largebox.gro -r conf_largebox.gro -o em -p topol.top -maxwarn 2
+run_step gmx grompp -v -f "$INPUT_DIR/gromacs-st.mdp" -c conf_largebox.gro -r conf_largebox.gro -o em -p topol.top -maxwarn 2
 
 log "Step 3: Running mdrun for energy minimization"
 run_step gmx mdrun -v -s em -o em.trr -c after_em.gro -g em.log
 
 # --- 4. CONSTRAINED MINIMIZATION / CONJUGATE GRADIENT (CG) ---
+log "Creating parameter file: gromacs-cg.mdp"
+write_cg_mdp 250000 # number of steps
 log "Step 4: Running grompp for conjugate gradient (using gromacs-cg.mdp)"
-run_step gmx grompp -v -f "$SCRIPT_DIR/gromacs-cg.mdp" -c after_em.gro -r after_em.gro -o cg -p topol.top
+run_step gmx grompp -v -f "$INPUT_DIR/gromacs-cg.mdp" -c after_em.gro -r after_em.gro -o cg -p topol.top
 
 log "Step 4: Running mdrun for conjugate gradient"
 run_step gmx mdrun -v -s cg -o cg.trr -c after_cg.gro -g cg.log
 
 # --- 5. MOLECULAR DYNAMICS (MD) ---
+log "Creating parameter file: gromacs-md.mdp"
+write_md_mdp 500000
 log "Step 5: Running grompp for molecular dynamics (using gromacs-md.mdp)"
-run_step gmx grompp -f "$SCRIPT_DIR/gromacs-md.mdp" -o md -c after_cg.gro -r after_cg.gro -p topol.top -maxwarn 1
+run_step gmx grompp -f "$INPUT_DIR/gromacs-md.mdp" -o md -c after_cg.gro -r after_cg.gro -p topol.top -maxwarn 1
 
 log "Step 5: Running mdrun for molecular dynamics"
 run_step gmx mdrun -v -s md -o md.trr -c after_md.gro -g md.log
