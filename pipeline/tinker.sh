@@ -91,6 +91,9 @@ log "Appended PARAMETERS, RATTLE, and cutoff settings to key.key"
 
 # 6) Dynamics
 
+log "Fixing XYZ issues. Dropping duplicate entries or colliding atoms."
+run_step python3 "$SCRIPT_DIR/tinker_xyz_fix.py" "${INPUT_DIR}/${PDB_NAME}.xyz_2"
+
 N_STEPS="$(ns_to_steps $MD_DURATION)"
 log "Step 6: Running dynamic (molecular dynamics simulation)"
 run_step dynamic "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "$INPUT_DIR/key.key" <<EOF
