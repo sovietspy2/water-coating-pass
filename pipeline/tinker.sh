@@ -122,6 +122,7 @@ esac
 
 LAST_FRAME_NUMBER=$((TOTAL_LINES / LINES_PER_FRAME))
 log "Last frame index in .arc file is ${LAST_FRAME_NUMBER}"
+## TODO: We need to refactor this, keeping all the frames for last run!!!
 
 # 8) Extract last frame with ARCEDIT
 log "Step 7: Extracting last frame with arcedit"

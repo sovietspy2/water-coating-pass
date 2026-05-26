@@ -60,6 +60,7 @@ run_pass_and_mm() {
   local waters="$2"
   local pass_out="${input_pdb%.pdb}_${waters}WAT.pdb"
   local mm_out="${pass_out%.pdb}_mm.pdb"
+  local md_duration="$3"
 
   log "Current input: $input_pdb"
   log "Expected pass output: $pass_out"
@@ -72,7 +73,7 @@ run_pass_and_mm() {
   rm -f -- filtered_renum.pdb
   log "Removed old filtered_renum.pdb if present"
 
-  run_step run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR"
+  run_step run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR" "$md_duration"
   require_file "filtered_renum.pdb" "MM output"
   log "MM output found: filtered_renum.pdb"
 
@@ -118,15 +119,15 @@ case "$RUN_TYPE" in
     readonly ITERATIONS=5
     readonly WATERS_PER_PASS=1
     readonly OUTPUT_TAG="5x5"
-    readonly FINAL_MD_DURATION=1 #in ns
-    readonly INTERMEDIATE_MD_DURATION="0.1" # in ns
+    readonly FINAL_MD_DURATION="0.1" #in ns
+    readonly INTERMEDIATE_MD_DURATION="0.01" # in ns
     ;;
   SHORT)
     readonly ITERATIONS=1
     readonly WATERS_PER_PASS=5
     readonly OUTPUT_TAG="5x1"
-    readonly FINAL_MD_DURATION=1 #in ns
-    readonly INTERMEDIATE_MD_DURATION=1 # in ns
+    readonly FINAL_MD_DURATION="0.1" #in ns
+    readonly INTERMEDIATE_MD_DURATION="0.1" # in ns
     ;;
   *)
     echo "Error: invalid RUN_TYPE '$RUN_TYPE' (expected LONG or SHORT)" >&2

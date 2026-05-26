@@ -204,8 +204,10 @@ run_step gmx trjconv -f pbc_whole.xtc -s md.tpr -o system_compact.xtc -center -p
 0
 EOF
 
+# TODO: We need to refactor this, we need to KEEP all the trajectories at the last run!!!
 log "Step 6c: Creating final frame PDB file"
-run_step gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b 1000 -e 1000 <<EOF
+END_PS="$(awk -v ns="$MD_DURATION" 'BEGIN { printf "%.3f", ns * 1000 }')" # We need this because we introduced time params
+run_step gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b "$END_PS" -e "$END_PS" <<EOF
 0
 EOF
 
