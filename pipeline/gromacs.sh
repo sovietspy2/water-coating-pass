@@ -25,6 +25,7 @@ INPUT_PDB="$1"
 INPUT_ABS="$(cd -P "$(dirname "$INPUT_PDB")" && pwd)/$(basename "$INPUT_PDB")"
 INPUT_DIR="$(dirname "$INPUT_ABS")"
 MD_DURATION="$2"
+MOBYWAT_OUTPUT_ENABLED="$3"
 
 # Setup logging in the INPUT_DIR (output directory)
 LOGFILE="${INPUT_DIR}/application.LOG"
@@ -35,6 +36,7 @@ log "INPUT_PDB=$INPUT_PDB"
 log "INPUT_ABS=$INPUT_ABS"
 log "INPUT_DIR=$INPUT_DIR"
 log "MD_DURATION=$MD_DURATION ns"
+log "MOBYWAT_OUTPUT_ENABLED=$MOBYWAT_OUTPUT_ENABLED"
 
 touch "${INPUT_DIR}/GROMACS.protocol"
 log "Created GROMACS.protocol file"
@@ -204,7 +206,6 @@ run_step gmx trjconv -f pbc_whole.xtc -s md.tpr -o system_compact.xtc -center -p
 0
 EOF
 
-# TODO: We need to refactor this, we need to KEEP all the trajectories at the last run!!!
 log "Step 6c: Creating final frame PDB file"
 END_PS="$(awk -v ns="$MD_DURATION" 'BEGIN { printf "%.3f", ns * 1000 }')" # We need this because we introduced time params
 run_step gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b "$END_PS" -e "$END_PS" <<EOF
@@ -218,5 +219,8 @@ run_step python3 "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb"
 
 log "Step 8: Post processing PDB"
 run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_DIR/filtered_renum.pdb"
+
+log "Step 9: Post processing, creating MobyWat compatible file trajectory file."
+cp system_compact.xtc mobywat_input.xtc
 
 log "gromacs.sh completed successfully"
