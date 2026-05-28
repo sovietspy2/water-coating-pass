@@ -22,6 +22,9 @@ INPUT_PDB="$1"
 INPUT_DIR="$(dirname "$INPUT_PDB")"
 PDB_NAME="$(basename "${INPUT_PDB%.pdb}")"
 MD_DURATION="$2"
+MOBYWAT_OUTPUT_ENABLED="$3"
+TARGET_FRAMES="${4:-100}" # This defines how many frames we want to save during simulation
+DT_FS="1.0" # tinker dynamic related property
 
 # Setup logging in the INPUT_DIR (output directory)
 LOGFILE="${INPUT_DIR}/application.LOG"
@@ -32,6 +35,8 @@ log "INPUT_PDB=$INPUT_PDB"
 log "INPUT_DIR=$INPUT_DIR"
 log "PDB_NAME=$PDB_NAME"
 log "MD_DURATION=$MD_DURATION"
+log "MOBYWAT_OUTPUT_ENABLED=$MOBYWAT_OUTPUT_ENABLED"
+log "TARGET_FRAMES=$TARGET_FRAMES"
 
 SECONDS=0
 TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
@@ -63,9 +68,6 @@ amber99.prm
 EOF
 log "Generated XYZ file: ${INPUT_DIR}/${PDB_NAME}.xyz"
 
-log "Fixing PDB to XYZ conversion issues via Python. Dropping duplicate entries or colliding atoms."
-run_step python3 "$SCRIPT_DIR/tinker_xyz_fix.py" "${INPUT_DIR}/${PDB_NAME}.xyz"
-
 # 4) Minimization
 log "Step 4: Running minimize (energy minimization)"
 run_step minimize "${INPUT_DIR}/${PDB_NAME}.xyz" <<EOF
@@ -82,6 +84,7 @@ cat >> "${INPUT_DIR}/key.key" <<EOF
 PARAMETERS amber99.prm
 
 RATTLE
+ARCHIVE
 
 vdw-cutoff 9.0
 chg-cutoff 9.0
@@ -91,15 +94,34 @@ log "Appended PARAMETERS, RATTLE, and cutoff settings to key.key"
 
 # 6) Dynamics
 
-log "Fixing XYZ issues. Dropping duplicate entries or colliding atoms."
-run_step python3 "$SCRIPT_DIR/tinker_xyz_fix.py" "${INPUT_DIR}/${PDB_NAME}.xyz_2"
+# Convertion ns to steps
+N_STEPS="$(ns_to_steps "$MD_DURATION" "$DT_FS")"
 
-N_STEPS="$(ns_to_steps $MD_DURATION)"
+# Choose approximate number of saved frames in STEP units first
+SAVE_EVERY_STEPS=$(( N_STEPS / TARGET_FRAMES ))
+if (( SAVE_EVERY_STEPS < 1 )); then
+  SAVE_EVERY_STEPS=1
+fi
+
+ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
+
+# TINKER dynamic expects TIME BETWEEN SAVES IN PICOSECONDS
+SAVE_INTERVAL_PS="$(awk -v steps="$SAVE_EVERY_STEPS" -v dt="$DT_FS" 'BEGIN {
+  printf "%.6f\n", (steps * dt) / 1000.0
+}')"
+
 log "Step 6: Running dynamic (molecular dynamics simulation)"
+log "MD_DURATION=$MD_DURATION ns"
+log "N_STEPS=$N_STEPS"
+log "TARGET_FRAMES=$TARGET_FRAMES"
+log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
+log "Expected saved frames ~= $ACTUAL_FRAMES"
+log "SAVE_INTERNAL_PS=$SAVE_INTERVAL_PS"
+
 run_step dynamic "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "$INPUT_DIR/key.key" <<EOF
 ${N_STEPS}
-1.0
-10
+${DT_FS}
+${SAVE_INTERVAL_PS}
 2
 300
 EOF
@@ -163,7 +185,13 @@ OUT="${INPUT_DIR}/filtered_renum.pdb"
 cp -f -- "$LAST_PDB" "$OUT"
 log "Copied final structure to filtered_renum.pdb"
 
-log "Step 10: Post processing PDB"
-run_step "$SCRIPT_DIR/format-pdb.sh" "${INPUT_DIR}/filtered_renum.pdb"
+if [[ "$MOBYWAT_OUTPUT_ENABLED" != "true" ]]; then
+  log "Not building MobyWat output yet."
+  exit 0
+fi
+
+# 10) Build a multi-model trajectory PDB from the full ARC history (OPTIONAL)
+log "Step 10: Building multi-model trajectory PDB from ARC"
+run_step "$SCRIPT_DIR/arc_to_pdb.sh" $ARC mobywat_input.pdb
 
 log "tinker.sh completed successfully"
