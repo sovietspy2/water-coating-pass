@@ -120,14 +120,14 @@ case "$RUN_TYPE" in
     readonly ITERATIONS=5
     readonly WATERS_PER_PASS=1
     readonly OUTPUT_TAG="5x5"
-    readonly FINAL_MD_DURATION="1" #in ns
-    readonly INTERMEDIATE_MD_DURATION="0.1" # in ns
+    readonly FINAL_MD_DURATION="0.1" #in ns
+    readonly INTERMEDIATE_MD_DURATION="0.01" # in ns
     ;;
   SHORT)
     readonly ITERATIONS=1
     readonly WATERS_PER_PASS=5 # used to be 5
     readonly OUTPUT_TAG="5x1"
-    readonly FINAL_MD_DURATION="1" #in ns
+    readonly FINAL_MD_DURATION="0.1" #in ns
     readonly INTERMEDIATE_MD_DURATION="0.1" # in ns
     ;;
   *)
