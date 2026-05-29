@@ -3,13 +3,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Reuse your pipeline helpers if available.
 if [[ -f "$SCRIPT_DIR/pipeline_common.sh" ]]; then
   # shellcheck disable=SC1091
   source "$SCRIPT_DIR/pipeline_common.sh"
 fi
 
-# Fallback helpers in case the script is run standalone.
 if ! declare -F log >/dev/null 2>&1; then
   log() {
     printf '[%s] %s\n' "$(date '+%F %T')" "$*"
@@ -82,9 +80,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Detect TINKER ARC frame size using the same logic as your workflow.
 NATOMS="$(awk 'NR==1 {print $1; exit}' "$ARC")"
 SECOND_FIRST="$(awk 'NR==2 {print $1; exit}' "$ARC")"
+TOTAL_LINES="$(wc -l < "$ARC" | tr -d ' ')"
 
 if [[ -z "${NATOMS:-}" || ! "$NATOMS" =~ ^[0-9]+$ ]]; then
   log "ERROR: Could not determine atom count from ARC: $ARC"
@@ -96,7 +94,6 @@ case "$SECOND_FIRST" in
   * )        LINES_PER_FRAME=$((NATOMS + 1)) ;;
 esac
 
-TOTAL_LINES="$(wc -l < "$ARC" | tr -d ' ')"
 if (( TOTAL_LINES % LINES_PER_FRAME != 0 )); then
   log "ERROR: ARC line count ($TOTAL_LINES) is not divisible by lines/frame ($LINES_PER_FRAME)"
   exit 1
@@ -104,33 +101,45 @@ fi
 
 NFRAMES=$((TOTAL_LINES / LINES_PER_FRAME))
 
+if (( NFRAMES < 1 )); then
+  log "ERROR: No frames detected in ARC: $ARC"
+  exit 1
+fi
+
 log "Detected NATOMS=$NATOMS"
 log "Detected LINES_PER_FRAME=$LINES_PER_FRAME"
 log "Detected NFRAMES=$NFRAMES"
 
-# Split the ARC into per-frame XYZ files.
+log "Splitting ARC into per-frame XYZ files"
 awk -v lpf="$LINES_PER_FRAME" -v prefix="$TMPDIR/${PDB_NAME}_frame_" '
 {
   frame = int((NR - 1) / lpf) + 1
   file = sprintf("%s%06d.xyz", prefix, frame)
+  if (prev != "" && file != prev) close(prev)
   print >> file
+  prev = file
+}
+END {
+  if (prev != "") close(prev)
 }
 ' "$ARC"
 
-shopt -s nullglob
-
-# Build the multi-model PDB.
 : > "$OUT"
 model=1
+shopt -s nullglob
 
-for frame_xyz in "$TMPDIR"/"${PDB_NAME}"_frame_*.xyz; do
+for ((frame=1; frame<=NFRAMES; frame++)); do
+  frame_xyz="${TMPDIR}/${PDB_NAME}_frame_$(printf '%06d' "$frame").xyz"
   frame_base="${frame_xyz%.xyz}"
-  frame_tag="$(basename "$frame_base")"
 
-  # xyzpdb looks for a .seq file matching the input basename.
+  if [[ ! -f "$frame_xyz" ]]; then
+    log "ERROR: Missing split frame XYZ: $frame_xyz"
+    exit 1
+  fi
+
   ln -sf "$SEQ" "${frame_base}.seq"
 
-  log "Converting frame $model: $frame_xyz -> PDB"
+  log "Converting frame $frame/$NFRAMES"
   run_step xyzpdb "$frame_xyz" <<EOF
 $PRM
 PDB
@@ -143,9 +152,7 @@ EOF
   fi
 
   frame_pdb="${pdb_candidates[0]}"
-  log "Using converted PDB: $frame_pdb"
 
-  # Optional header from first frame only.
   if (( model == 1 )); then
     awk '
       /^(HEADER|TITLE |COMPND|SOURCE|KEYWDS|EXPDTA|AUTHOR|REMARK|CRYST1)/ {print}
@@ -159,8 +166,6 @@ EOF
   ' "$frame_pdb" >> "$OUT"
 
   printf 'ENDMDL\n' >> "$OUT"
-
-  log "Appended MODEL $model from $frame_tag"
   ((model++))
 done
 

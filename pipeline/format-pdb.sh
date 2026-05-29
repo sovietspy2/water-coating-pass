@@ -9,8 +9,6 @@ Rewrites a PDB file to:
   1. Remove rows that start with CONECT
   2. Rename OW to O in atom-name field
   3. Replace residue names 001 or 002 or SOL with WAT
-  4. Rename HETATM to ATOM
-  5. Renumber ATOM serials so they increment by 1
 
 Defaults:
   OUTPUT_PDB = overwrite INPUT_PDB
@@ -90,14 +88,8 @@ function atom_field(name,    n) {
   return pad_right(name, 4)
 }
 
-function safe_num(s, fallback) {
-  s = trim(s)
-  if (s ~ /^-?[0-9]+$/) return s + 0
-  return fallback
-}
-
-function log_change(kind, input_line, out_serial, msg, before, after) {
-  print "[" kind "] input_line=" input_line ", output_serial=" out_serial ": " msg >> log_file
+function log_change(kind, input_line, atom_serial, msg, before, after) {
+  print "[" kind "] input_line=" input_line ", atom_serial=" atom_serial ": " msg >> log_file
   if (before != "") print "  before: " before >> log_file
   if (after  != "") print "  after : " after >> log_file
 }
@@ -105,14 +97,10 @@ function log_change(kind, input_line, out_serial, msg, before, after) {
 BEGIN {
   removed_conect = 0
   changed_rows = 0
-  hetatm_to_atom = 0
   ow_to_o = 0
   res_to_wat = 0
-  serial_fixed = 0
   output_atom_rows = 0
   total_input_rows = 0
-  next_serial = ""
-  first_atom_seen = 0
   print "PDB rewrite log" > log_file
   print "===============" >> log_file
 }
@@ -137,7 +125,6 @@ BEGIN {
   old_line = $0
   old_record = record
   old_serial_raw = substr($0, 7, 5)
-  old_serial = safe_num(old_serial_raw, 0)
   old_atom = substr($0, 13, 4)
   old_altloc = substr($0, 17, 1)
   old_res = substr($0, 18, 3)
@@ -151,18 +138,13 @@ BEGIN {
   old_temp = substr($0, 61, 6)
   old_tail = (length($0) >= 67 ? substr($0, 67) : "")
 
-  new_record = "ATOM  "
+  new_record = old_record
   new_atom_trim = trim(old_atom)
   new_res_trim = trim(old_res)
+  new_serial_field = pad_left(trim(old_serial_raw), 5)
 
   row_changes = ""
   row_changed = 0
-
-  if (old_record == "HETATM") {
-    hetatm_to_atom++
-    row_changed = 1
-    row_changes = row_changes "HETATM->ATOM; "
-  }
 
   if (new_atom_trim == "OW") {
     new_atom_trim = "O"
@@ -178,24 +160,9 @@ BEGIN {
     row_changes = row_changes "resname->WAT; "
   }
 
-  if (!first_atom_seen) {
-    if (trim(old_serial_raw) ~ /^[0-9]+$/) next_serial = old_serial
-    else next_serial = 1
-    first_atom_seen = 1
-  }
-
-  new_serial = next_serial
-  next_serial++
-
-  if (old_serial != new_serial) {
-    serial_fixed++
-    row_changed = 1
-    row_changes = row_changes "serial " old_serial "->" new_serial "; "
-  }
-
-  new_line = sprintf("%-6s%5d %-4s%1s%3s %1s%4s%1s   %8s%8s%8s%6s%6s%s",
+  new_line = sprintf("%-6s%5s %-4s%1s%3s %1s%4s%1s   %8s%8s%8s%6s%6s%s",
                      new_record,
-                     new_serial,
+                     new_serial_field,
                      atom_field(new_atom_trim),
                      (old_altloc == "" ? " " : old_altloc),
                      pad_right(new_res_trim, 3),
@@ -216,7 +183,7 @@ BEGIN {
     changed_rows++
     if (row_changes == "") row_changes = "format normalization; "
     sub(/; $/, "", row_changes)
-    log_change("CHANGED", NR, new_serial, row_changes, old_line, new_line)
+    log_change("CHANGED", NR, trim(old_serial_raw), row_changes, old_line, new_line)
   }
 }
 
@@ -229,10 +196,8 @@ END {
   print "Output atom rows        : " output_atom_rows >> log_file
   print "Removed CONECT rows     : " removed_conect >> log_file
   print "Changed output rows     : " changed_rows >> log_file
-  print "HETATM -> ATOM changes  : " hetatm_to_atom >> log_file
   print "OW -> O changes         : " ow_to_o >> log_file
   print "001/002 -> WAT changes  : " res_to_wat >> log_file
-  print "Serial fixes            : " serial_fixed >> log_file
   print "Total rows changed      : " total_changed >> log_file
 }
 ' "$input" > "$tmp_output"

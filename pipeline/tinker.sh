@@ -224,4 +224,9 @@ fi
 log "Step 10: Building multi-model trajectory PDB from ARC"
 run_step "$SCRIPT_DIR/arc_to_pdb.sh" "$ARC" "${INPUT_DIR}/mobywat_input.pdb"
 
+log "Step 11: Reformatting PDB file"
+run_step "$SCRIPT_DIR/format-pdb.sh" "${INPUT_DIR}/mobywat_input.pdb"
+
+log "${INPUT_DIR}/mobywat_input.pdb is ready to processed by MobyWat!"
+
 log "tinker.sh completed successfully"

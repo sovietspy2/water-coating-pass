@@ -87,6 +87,19 @@ The script exits immediately on error and writes a failure message to the log wi
 - tinker installed and on path
 - gromacs installed and on path
 
+## Understanding the output
+
+### Gromacs mode
+- Gromacs mode will produce .gro and .xtc files
+- load both files to Pymol and run `zoom mobywat_input` command to find it
+- use `show spheres` to see the water molecules
+
+### Tinker mode
+- Tinker mode will produce PDB file (multiple models)
+- load the PDB file to Pymol
+- use `show spheres` to see the water molecules
+
+
 ## Acknowledgments
 
 This project reuses code from **MobyWat** http://www.mobywat.com.
