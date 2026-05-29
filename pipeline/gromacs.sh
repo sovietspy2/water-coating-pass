@@ -10,8 +10,25 @@ ns_to_nsteps() {
   }'
 }
 
-if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 <input.pdb>" >&2
+ns_to_ps() {
+  local ns="${1:?usage: ns_to_ps <ns>}"
+
+  awk -v ns="$ns" 'BEGIN {
+    printf "%.6f", ns * 1000.0
+  }'
+}
+
+steps_to_ps() {
+  local steps="${1:?usage: steps_to_ps <steps>}"
+  local dt_ps="${2:-0.002}"
+
+  awk -v steps="$steps" -v dt="$dt_ps" 'BEGIN {
+    printf "%.6f", steps * dt
+  }'
+}
+
+if [[ $# -lt 3 || $# -gt 4 ]]; then
+  echo "Usage: $0 <input.pdb> <md_duration_ns> <mobywat_output_enabled> [target_frames]" >&2
   exit 1
 fi
 
@@ -24,8 +41,11 @@ source "$SCRIPT_DIR/pipeline_common.sh"
 INPUT_PDB="$1"
 INPUT_ABS="$(cd -P "$(dirname "$INPUT_PDB")" && pwd)/$(basename "$INPUT_PDB")"
 INPUT_DIR="$(dirname "$INPUT_ABS")"
+PDB_NAME="$(basename "${INPUT_ABS%.pdb}")"
 MD_DURATION="$2"
 MOBYWAT_OUTPUT_ENABLED="$3"
+TARGET_FRAMES="${4:-100}"
+DT_PS="0.002"
 
 # Setup logging in the INPUT_DIR (output directory)
 LOGFILE="${INPUT_DIR}/application.LOG"
@@ -37,13 +57,15 @@ log "INPUT_ABS=$INPUT_ABS"
 log "INPUT_DIR=$INPUT_DIR"
 log "MD_DURATION=$MD_DURATION ns"
 log "MOBYWAT_OUTPUT_ENABLED=$MOBYWAT_OUTPUT_ENABLED"
+log "TARGET_FRAMES=$TARGET_FRAMES"
+log "DT_PS=$DT_PS"
 
 touch "${INPUT_DIR}/GROMACS.protocol"
 log "Created GROMACS.protocol file"
 
 # --- TIMER SETUP ---
 SECONDS=0
-TIMEFILE="${INPUT_ABS}-mm-process-time.txt"
+TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
 
 ## GROMACS parameter helpers
 
@@ -73,7 +95,8 @@ EOF
 write_md_mdp() {
   local outfile="$INPUT_DIR/gromacs-md.mdp"
   local nsteps="${1:-500000}" # default is total 1 ns.
-  local dt="${2:-0.002}"
+  local save_every_steps="${2:-500}"
+  local dt="${3:-0.002}"
 
   cat > "$outfile" <<EOF
 ; Modified gromacs-md.mdp for Pseudo-PBC
@@ -84,8 +107,8 @@ integrator          = md
 dt                  = ${dt}
 nsteps              = ${nsteps}
 nstcomm             = 500
-nstxout             = 500
-nstvout             = 500
+nstxout             = ${save_every_steps}
+nstvout             = ${save_every_steps}
 nstlog              = 500
 nstenergy           = 500
 nstlist             = 10
@@ -178,20 +201,43 @@ run_step gmx mdrun -v -s em -o em.trr -c after_em.gro -g em.log
 # --- 4. CONSTRAINED MINIMIZATION / CONJUGATE GRADIENT (CG) ---
 log "Creating parameter file: gromacs-cg.mdp"
 write_cg_mdp 250000 # number of steps
-log "Step 4: Running grompp for conjugate gradient (using gromacs-cg.mdp)"
+log "Step 4a: Running grompp for conjugate gradient (using gromacs-cg.mdp)"
 run_step gmx grompp -v -f "$INPUT_DIR/gromacs-cg.mdp" -c after_em.gro -r after_em.gro -o cg -p topol.top
 
-log "Step 4: Running mdrun for conjugate gradient"
+log "Step 4b: Running mdrun for conjugate gradient"
 run_step gmx mdrun -v -s cg -o cg.trr -c after_cg.gro -g cg.log
 
-# --- 5. MOLECULAR DYNAMICS (MD) ---
-STEPS="$(ns_to_nsteps $MD_DURATION)"
+# --- 5. MOLECULAR DYNAMICS ---
+N_STEPS="$(ns_to_nsteps "$MD_DURATION" "$DT_PS")"
+TOTAL_TIME_PS="$(ns_to_ps "$MD_DURATION")"
+
+if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
+    SAVE_EVERY_STEPS=$(( N_STEPS / TARGET_FRAMES ))
+    if (( SAVE_EVERY_STEPS < 1 )); then
+        SAVE_EVERY_STEPS=1
+    fi
+
+    ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
+    SAVE_INTERVAL_PS="$(steps_to_ps "$SAVE_EVERY_STEPS" "$DT_PS")"
+else
+    SAVE_EVERY_STEPS="$N_STEPS"
+    ACTUAL_FRAMES=1
+    SAVE_INTERVAL_PS="$TOTAL_TIME_PS"
+fi
+
+log "Step 5: Running molecular dynamics"
+log "MD_DURATION=$MD_DURATION ns"
+log "TOTAL_TIME_PS=$TOTAL_TIME_PS ps"
+log "N_STEPS=$N_STEPS"
+log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
+log "SAVE_INTERVAL_PS=$SAVE_INTERVAL_PS ps"
+log "Expected saved frames ~= $ACTUAL_FRAMES"
 log "Creating parameter file: gromacs-md.mdp"
-write_md_mdp $STEPS
-log "Step 5: Running grompp for molecular dynamics (using gromacs-md.mdp)"
+write_md_mdp "$N_STEPS" "$SAVE_EVERY_STEPS" "$DT_PS"
+log "Step 5a: Running grompp for molecular dynamics (using gromacs-md.mdp)"
 run_step gmx grompp -f "$INPUT_DIR/gromacs-md.mdp" -o md -c after_cg.gro -r after_cg.gro -p topol.top -maxwarn 1
 
-log "Step 5: Running mdrun for molecular dynamics"
+log "Step 5b: Running mdrun for molecular dynamics"
 run_step gmx mdrun -v -s md -o md.trr -c after_md.gro -g md.log
 
 # --- 6. POST-PROCESSING (Cleaning up the trajectory) ---
@@ -207,7 +253,7 @@ run_step gmx trjconv -f pbc_whole.xtc -s md.tpr -o system_compact.xtc -center -p
 EOF
 
 log "Step 6c: Creating final frame PDB file"
-END_PS="$(awk -v ns="$MD_DURATION" 'BEGIN { printf "%.3f", ns * 1000 }')" # We need this because we introduced time params
+END_PS="$TOTAL_TIME_PS" # We need this because we introduced time params
 run_step gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b "$END_PS" -e "$END_PS" <<EOF
 0
 EOF
