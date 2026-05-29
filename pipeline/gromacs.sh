@@ -109,6 +109,7 @@ nsteps              = ${nsteps}
 nstcomm             = 500
 nstxout             = ${save_every_steps}
 nstvout             = ${save_every_steps}
+nstfout             = 0
 nstlog              = 500
 nstenergy           = 500
 nstlist             = 10
@@ -170,7 +171,7 @@ EOF
 
 write_runtime() {
   local elapsed="$SECONDS"
-  printf 'runtime for mm is %s seconds\n' "$elapsed" > "$TIMEFILE"
+  printf 'runtime for mm is %s seconds\\n' "$elapsed" > "$TIMEFILE"
   log "Runtime written to $TIMEFILE: $elapsed seconds"
 }
 trap write_runtime EXIT
@@ -220,9 +221,9 @@ if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
     ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
     SAVE_INTERVAL_PS="$(steps_to_ps "$SAVE_EVERY_STEPS" "$DT_PS")"
 else
-    SAVE_EVERY_STEPS="$N_STEPS"
-    ACTUAL_FRAMES=1
-    SAVE_INTERVAL_PS="$TOTAL_TIME_PS"
+    SAVE_EVERY_STEPS=0
+    ACTUAL_FRAMES=0
+    SAVE_INTERVAL_PS="0.000000"
 fi
 
 log "Step 5: Running molecular dynamics"
@@ -238,25 +239,34 @@ log "Step 5a: Running grompp for molecular dynamics (using gromacs-md.mdp)"
 run_step gmx grompp -f "$INPUT_DIR/gromacs-md.mdp" -o md -c after_cg.gro -r after_cg.gro -p topol.top -maxwarn 1
 
 log "Step 5b: Running mdrun for molecular dynamics"
-run_step gmx mdrun -v -s md -o md.trr -c after_md.gro -g md.log
+if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
+  run_step gmx mdrun -v -s md -o md.trr -c after_md.gro -g md.log
+else
+  run_step gmx mdrun -v -s md -c after_md.gro -g md.log
+fi
 
 # --- 6. POST-PROCESSING (Cleaning up the trajectory) ---
-log "Step 6a: Running trjconv for PBC correction (pbc whole)"
-run_step gmx trjconv -f md.trr -s md.tpr -o pbc_whole.xtc -pbc whole <<EOF
+if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
+  log "Step 6a: Running trjconv for PBC correction (pbc whole)"
+  run_step gmx trjconv -f md.trr -s md.tpr -o pbc_whole.xtc -pbc whole <<EOF
 0
 EOF
 
-log "Step 6b: Running trjconv for compact system output"
-run_step gmx trjconv -f pbc_whole.xtc -s md.tpr -o system_compact.xtc -center -pbc mol -ur compact -boxcenter zero <<EOF
+  log "Step 6b: Running trjconv for compact system output"
+  run_step gmx trjconv -f pbc_whole.xtc -s md.tpr -o system_compact.xtc -center -pbc mol -ur compact -boxcenter zero <<EOF
 1
 0
 EOF
 
-log "Step 6c: Creating final frame PDB file"
-END_PS="$TOTAL_TIME_PS" # We need this because we introduced time params
-run_step gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b "$END_PS" -e "$END_PS" <<EOF
+  log "Step 6c: Creating final frame PDB file"
+  END_PS="$TOTAL_TIME_PS" # We need this because we introduced time params
+  run_step gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b "$END_PS" -e "$END_PS" <<EOF
 0
 EOF
+else
+  log "Step 6: Creating final frame PDB file"
+  run_step gmx editconf -f after_md.gro -o lastframe_drop.pdb
+fi
 
 # input: lastframe_drop.pdb output: filtered_renum.pdb
 # Removing waters too far away from protein
