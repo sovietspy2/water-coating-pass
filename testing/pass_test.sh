@@ -15,10 +15,12 @@ set -euo pipefail
 #   -p, --path PATH         Base path for test directories (default: ./test_runs)
 #   -m, --mode MODE         Mode to test: tinker, gromacs, or all (default: all)
 #   -t, --type TYPE         Type to test: SHORT, LONG, or all (default: all)
+#   -l, --loop              Run each mode/type combination sequentially in an infinite loop until stopped
 #   -h, --help              Show this help message
 #
 # Example:
 #   ./pass_test.sh -u http://files.rcsb.org/download/1PSV.pdb -n 5 -p /tmp/tests -m all -t all
+#   ./pass_test.sh -l -m gromacs -t SHORT
 #
 ################################################################################
 
@@ -32,6 +34,7 @@ NUM_TESTS=10
 TEST_BASE_PATH="./test_runs"
 TEST_MODES=("tinker" "gromacs")
 TEST_TYPES=("SHORT" "LONG")
+LOOP_MODE=false
 
 # Runtime tracking
 declare -a background_pids
@@ -64,6 +67,8 @@ Options:
                           (default: all)
   -t, --type TYPE         Type to test: SHORT, LONG, or all
                           (default: all)
+  -l, --loop              Run each mode/type combination sequentially in an
+                          infinite loop until stopped
   -h, --help              Show this help message
 
 Examples:
@@ -76,10 +81,19 @@ Examples:
   # Run SHORT tests only in /tmp/test_dir
   ./pass_test.sh -p /tmp/test_dir -t SHORT
 
+  # Run sequential tests forever until interrupted
+  ./pass_test.sh -l -m all -t all
+
 Notes:
-  With -n 2 -t SHORT:
-    - 2 tests × 2 modes (tinker, gromacs) = 4 total test runs
-    - Each will create a separate folder with its own PDB download
+  Standard mode:
+    With -n 2 -t SHORT:
+      - 2 tests × 2 modes (tinker, gromacs) = 4 total test runs
+      - Each will create a separate folder with its own PDB download
+
+  Loop mode (-l):
+      - Runs tests one after another, not in parallel
+      - Repeats forever until stopped with Ctrl+C or SIGTERM
+      - Prints the runtime of each individual run
 EOF
   exit 0
 }
@@ -88,7 +102,8 @@ log_msg() {
   local level="$1"
   shift
   local msg="$*"
-  local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  local timestamp
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
   case "$level" in
     INFO)
@@ -107,6 +122,34 @@ log_msg() {
       echo "[${timestamp}] ${msg}"
       ;;
   esac
+}
+
+format_duration() {
+  local total_seconds="$1"
+  local hours=$((total_seconds / 3600))
+  local minutes=$(((total_seconds % 3600) / 60))
+  local seconds=$((total_seconds % 60))
+
+  if (( hours > 0 )); then
+    printf '%dh %dm %ds' "$hours" "$minutes" "$seconds"
+  elif (( minutes > 0 )); then
+    printf '%dm %ds' "$minutes" "$seconds"
+  else
+    printf '%ds' "$seconds"
+  fi
+}
+
+cleanup() {
+  log_msg WARN "Received interrupt. Stopping test runner..."
+
+  for pid in "${background_pids[@]:-}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+
+  wait 2>/dev/null || true
+  exit 130
 }
 
 check_prerequisites() {
@@ -156,6 +199,10 @@ parse_arguments() {
         fi
         shift 2
         ;;
+      -l|--loop)
+        LOOP_MODE=true
+        shift
+        ;;
       -h|--help)
         print_usage
         ;;
@@ -179,11 +226,7 @@ download_pdb() {
     return 1
   fi
 
-  if [[ ! -f "$output" ]]; then
-    return 1
-  fi
-
-  return 0
+  [[ -f "$output" ]]
 }
 
 extract_pdb_id() {
@@ -195,60 +238,113 @@ create_test_directory() {
   local test_num="$1"
   local mode="$2"
   local test_type="$3"
-  local test_dir="${TEST_BASE_PATH}/test_${test_num}_${mode}_${test_type}"
+  local suffix=""
+
+  if [[ "$LOOP_MODE" == true ]]; then
+    suffix="_$(date +%Y%m%d_%H%M%S)"
+  fi
+
+  local test_dir="${TEST_BASE_PATH}/test_${test_num}_${mode}_${test_type}${suffix}"
 
   mkdir -p "$test_dir"
   echo "$test_dir"
+}
+
+run_single_test_body() {
+  local test_num="$1"
+  local mode="$2"
+  local test_type="$3"
+  local pdb_id
+  pdb_id=$(extract_pdb_id "$PDB_URL")
+
+  local test_dir
+  test_dir=$(create_test_directory "$test_num" "$mode" "$test_type")
+  local pdb_file="${test_dir}/${pdb_id}.pdb"
+  local test_log="${test_dir}/test.log"
+  local result_file="${test_dir}/result.txt"
+
+  log_msg INFO "Starting test #${test_num}: MODE=$mode, TYPE=$test_type in $test_dir"
+
+  if ! download_pdb "$PDB_URL" "$pdb_file"; then
+    log_msg ERROR "Test #${test_num}: Failed to download PDB"
+    echo "FAILED: Download error" > "$result_file"
+    return 1
+  fi
+
+  log_msg INFO "Test #${test_num}: PDB downloaded, starting pass.sh"
+
+  local test_start
+  test_start=$(date +%s)
+
+  if "$PASS_SCRIPT" "$pdb_file" "$mode" "$test_type" >> "$test_log" 2>&1; then
+    local test_end
+    test_end=$(date +%s)
+    local test_duration=$((test_end - test_start))
+    local formatted_duration
+    formatted_duration=$(format_duration "$test_duration")
+
+    log_msg SUCCESS "Test #${test_num} ($mode/$test_type): Completed in ${formatted_duration}"
+    echo "SUCCESS: Completed in ${formatted_duration}" > "$result_file"
+    return 0
+  else
+    local exit_code=$?
+    local test_end
+    test_end=$(date +%s)
+    local test_duration=$((test_end - test_start))
+    local formatted_duration
+    formatted_duration=$(format_duration "$test_duration")
+
+    log_msg ERROR "Test #${test_num} ($mode/$test_type): Failed with exit code $exit_code after ${formatted_duration}"
+    echo "FAILED: Exit code $exit_code after ${formatted_duration}" > "$result_file"
+
+    if [[ -f "$test_log" ]]; then
+      log_msg WARN "Last 20 lines of ${test_log}:"
+      tail -20 "$test_log"
+    fi
+
+    return 1
+  fi
 }
 
 run_single_test() {
   local test_num="$1"
   local mode="$2"
   local test_type="$3"
-  local pdb_id=$(extract_pdb_id "$PDB_URL")
-
-  local test_dir=$(create_test_directory "$test_num" "$mode" "$test_type")
-  local pdb_file="${test_dir}/${pdb_id}.pdb"
-  local test_log="${test_dir}/test.log"
-  local result_file="${test_dir}/result.txt"
 
   {
-    {
-      log_msg INFO "Starting test #${test_num}: MODE=$mode, TYPE=$test_type in $test_dir"
+    run_single_test_body "$test_num" "$mode" "$test_type"
+  } 2>&1 | tee -a "${TEST_BASE_PATH}/global.log" &
 
-      # Download PDB file
-      if ! download_pdb "$PDB_URL" "$pdb_file"; then
-        log_msg ERROR "Test #${test_num}: Failed to download PDB"
-        echo "FAILED: Download error" > "$result_file"
-        exit 1
-      fi
-
-      log_msg INFO "Test #${test_num}: PDB downloaded, starting pass.sh"
-
-      # Run pass.sh
-      local test_start=$(date +%s)
-      if "$PASS_SCRIPT" "$pdb_file" "$mode" "$test_type" >> "$test_log" 2>&1; then
-        local test_end=$(date +%s)
-        local test_duration=$((test_end - test_start))
-        log_msg SUCCESS "Test #${test_num} ($mode/$test_type): Completed in ${test_duration}s"
-        echo "SUCCESS: Completed in ${test_duration}s" > "$result_file"
-        exit 0
-      else
-        local exit_code=$?
-        log_msg ERROR "Test #${test_num} ($mode/$test_type): Failed with exit code $exit_code"
-        echo "FAILED: Exit code $exit_code" > "$result_file"
-        tail -20 "$test_log" | log_msg WARN "Last 20 lines of test log:"
-        exit 1
-      fi
-    } 2>&1 | tee -a "${TEST_BASE_PATH}/global.log"
-  } &
-
-  # Store the PID and test info
   local pid=$!
   background_pids+=("$pid")
   pid_to_test["$pid"]="test_${test_num}_${mode}_${test_type}"
 
   echo "$pid"
+}
+
+run_single_test_sequential() {
+  local test_num="$1"
+  local mode="$2"
+  local test_type="$3"
+  local run_start
+  run_start=$(date +%s)
+
+  if {
+    run_single_test_body "$test_num" "$mode" "$test_type"
+  } 2>&1 | tee -a "${TEST_BASE_PATH}/global.log"; then
+    local run_end
+    run_end=$(date +%s)
+    local run_duration=$((run_end - run_start))
+    log_msg INFO "Run runtime: $(format_duration "$run_duration")"
+    return 0
+  else
+    local status=$?
+    local run_end
+    run_end=$(date +%s)
+    local run_duration=$((run_end - run_start))
+    log_msg WARN "Run runtime: $(format_duration "$run_duration")"
+    return "$status"
+  fi
 }
 
 wait_for_tests() {
@@ -265,6 +361,7 @@ wait_for_tests() {
       ((failed++))
       ((completed++))
     fi
+
     local percent=$((completed * 100 / total_tests))
     printf "\r${BLUE}Progress: %d/%d tests completed (%d%%)${NC}" "$completed" "$total_tests" "$percent"
   done
@@ -283,17 +380,18 @@ collect_results() {
   declare -a failed_tests
 
   for test_dir in "${TEST_BASE_PATH}"/test_*/; do
-    if [[ ! -d "$test_dir" ]]; then
-      continue
-    fi
+    [[ -d "$test_dir" ]] || continue
 
     ((total++))
-    local test_name=$(basename "$test_dir")
+    local test_name
+    test_name=$(basename "$test_dir")
     local result_file="${test_dir}/result.txt"
 
     if [[ -f "$result_file" ]]; then
-      local result=$(cat "$result_file")
-      if [[ "$result" =~ "SUCCESS" ]]; then
+      local result
+      result=$(cat "$result_file")
+
+      if [[ "$result" =~ SUCCESS ]]; then
         ((passed++))
         log_msg SUCCESS "$test_name: $result"
       else
@@ -308,7 +406,6 @@ collect_results() {
     fi
   done
 
-  # Print summary
   echo ""
   log_msg INFO "======================================"
   log_msg INFO "Test Summary"
@@ -340,35 +437,73 @@ print_test_configuration() {
   log_msg INFO "  Base path: $TEST_BASE_PATH"
   log_msg INFO "  Modes: ${TEST_MODES[*]}"
   log_msg INFO "  Types: ${TEST_TYPES[*]}"
+  log_msg INFO "  Loop mode: $LOOP_MODE"
   log_msg INFO "======================================"
 
-  # Calculate total tests
   local total_test_count=$((NUM_TESTS * ${#TEST_MODES[@]} * ${#TEST_TYPES[@]}))
-  log_msg INFO "Total test configurations to run: $total_test_count"
+  if [[ "$LOOP_MODE" == true ]]; then
+    log_msg INFO "Sequential test configurations per loop cycle: $total_test_count"
+  else
+    log_msg INFO "Total test configurations to run: $total_test_count"
+  fi
+
   log_msg INFO "Example folders to be created:"
   for ((i=1; i<=2 && i<=NUM_TESTS; i++)); do
     for mode in "${TEST_MODES[@]}"; do
       for test_type in "${TEST_TYPES[@]}"; do
-        log_msg INFO "  - test_${i}_${mode}_${test_type}/"
+        if [[ "$LOOP_MODE" == true ]]; then
+          log_msg INFO "  - test_${i}_${mode}_${test_type}_YYYYmmdd_HHMMSS/"
+        else
+          log_msg INFO "  - test_${i}_${mode}_${test_type}/"
+        fi
       done
     done
   done
   echo ""
 }
 
+run_loop_mode() {
+  local cycle=1
+
+  log_msg INFO "Loop mode enabled: tests will run sequentially forever until stopped"
+  echo ""
+
+  while true; do
+    log_msg INFO "Starting loop cycle #${cycle}"
+
+    for ((i=1; i<=NUM_TESTS; i++)); do
+      for mode in "${TEST_MODES[@]}"; do
+        for test_type in "${TEST_TYPES[@]}"; do
+          log_msg INFO "Loop cycle #${cycle}: running test iteration ${i} for ${mode}/${test_type}"
+          run_single_test_sequential "$i" "$mode" "$test_type" || true
+          echo ""
+        done
+      done
+    done
+
+    log_msg INFO "Completed loop cycle #${cycle}"
+    ((cycle++))
+    echo ""
+  done
+}
+
 main() {
+  trap cleanup INT TERM
+
   parse_arguments "$@"
 
   print_test_configuration
-
   check_prerequisites
 
-  # Create base test directory and global log
   mkdir -p "$TEST_BASE_PATH"
   : > "${TEST_BASE_PATH}/global.log"
   log_msg SUCCESS "Test directory created: $TEST_BASE_PATH"
 
-  # Launch all tests in parallel
+  if [[ "$LOOP_MODE" == true ]]; then
+    run_loop_mode
+    exit 0
+  fi
+
   log_msg INFO "Launching all tests in parallel..."
   echo ""
 
@@ -376,7 +511,6 @@ main() {
     for mode in "${TEST_MODES[@]}"; do
       for test_type in "${TEST_TYPES[@]}"; do
         run_single_test "$i" "$mode" "$test_type"
-        # Small delay to prevent too many simultaneous downloads
         sleep 0.1
       done
     done
@@ -385,22 +519,21 @@ main() {
   log_msg INFO "All tests launched. Waiting for completion..."
   echo ""
 
-  # Wait for all tests to complete
   local failed_count=0
   if ! wait_for_tests; then
     failed_count=$?
   fi
 
-  # Collect and display results
   if ! collect_results; then
     failed_count=$?
   fi
 
-  local TEST_END_TIME=$(date +%s)
+  local TEST_END_TIME
+  TEST_END_TIME=$(date +%s)
   local TOTAL_DURATION=$((TEST_END_TIME - TEST_START_TIME))
 
   log_msg INFO "======================================"
-  log_msg INFO "Total execution time: ${TOTAL_DURATION}s"
+  log_msg INFO "Total execution time: $(format_duration "$TOTAL_DURATION")"
   log_msg INFO "Results saved to: $TEST_BASE_PATH"
   log_msg INFO "Global log: ${TEST_BASE_PATH}/global.log"
   log_msg INFO "======================================"
@@ -408,5 +541,4 @@ main() {
   exit $failed_count
 }
 
-# Run main function
 main "$@"
