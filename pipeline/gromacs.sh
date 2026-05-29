@@ -220,7 +220,14 @@ run_step python3 "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb"
 log "Step 8: Post processing PDB"
 run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_DIR/filtered_renum.pdb"
 
+if [[ "$MOBYWAT_OUTPUT_ENABLED" != "true" ]]; then
+  log "MobyWat output disabled; skipping trajectory PDB generation"
+  log "gromacs.sh completed successfully"
+  exit 0
+fi
+
 log "Step 9: Post processing, creating MobyWat compatible file trajectory file."
 cp system_compact.xtc mobywat_input.xtc
+cp after_md.gro mobywat_input.gro
 
 log "gromacs.sh completed successfully"
