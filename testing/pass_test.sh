@@ -377,7 +377,7 @@ collect_results() {
   local total=0
   local passed=0
   local failed=0
-  declare -a failed_tests
+  declare -a failed_tests=()
 
   for test_dir in "${TEST_BASE_PATH}"/test_*/; do
     [[ -d "$test_dir" ]] || continue
