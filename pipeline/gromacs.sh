@@ -44,8 +44,8 @@ INPUT_DIR="$(dirname "$INPUT_ABS")"
 PDB_NAME="$(basename "${INPUT_ABS%.pdb}")"
 MD_DURATION="$2"
 MOBYWAT_OUTPUT_ENABLED="$3"
-TARGET_FRAMES="${4:-100}"
-DT_PS="0.002"
+TARGET_FRAMES="${4:-1000}"
+DT_PS="0.001" # 1 femtosecond
 
 # Setup logging in the INPUT_DIR (output directory)
 LOGFILE="${INPUT_DIR}/application.LOG"
