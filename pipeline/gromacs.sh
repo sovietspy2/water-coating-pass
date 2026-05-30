@@ -268,13 +268,13 @@ else
   run_step gmx editconf -f after_md.gro -o lastframe_drop.pdb
 fi
 
-# input: lastframe_drop.pdb output: filtered_renum.pdb
+# input: lastframe_drop.pdb output: next_step.pdb
 # Removing waters too far away from protein
 log "Step 7: Removing extra waters not connected to protein"
-run_step python3 "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb"
+run_step python3 "$SCRIPT_DIR/clean_pdb.py" "$INPUT_DIR/lastframe_drop.pdb" "next_step.pdb"
 
 log "Step 8: Post processing PDB"
-run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_DIR/filtered_renum.pdb"
+run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_DIR/next_step.pdb"
 
 if [[ "$MOBYWAT_OUTPUT_ENABLED" != "true" ]]; then
   log "MobyWat output disabled; skipping trajectory PDB generation"

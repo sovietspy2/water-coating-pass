@@ -210,9 +210,9 @@ fi
 log "Selected final PDB: ${LAST_PDB}"
 
 log "Step 9: Preparing final output"
-OUT="${INPUT_DIR}/filtered_renum.pdb"
+OUT="${INPUT_DIR}/next_step.pdb"
 cp -f -- "$LAST_PDB" "$OUT"
-log "Copied final structure to filtered_renum.pdb"
+log "Copied final structure to next_step.pdb"
 
 if [[ "$MOBYWAT_OUTPUT_ENABLED" != "true" ]]; then
   log "MobyWat output disabled; skipping trajectory PDB generation"

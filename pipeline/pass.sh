@@ -71,15 +71,15 @@ run_pass_and_mm() {
   require_file "$pass_out" "pass output"
   log "Pass output found: $pass_out"
 
-  rm -f -- filtered_renum.pdb
-  log "Removed old filtered_renum.pdb if present"
+  rm -f -- next_step.pdb
+  log "Removed old next_step.pdb if present"
 
   run_step run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED"
-  require_file "filtered_renum.pdb" "MM output"
-  log "MM output found: filtered_renum.pdb"
+  require_file "next_step.pdb" "MM output"
+  log "MM output found: next_step.pdb"
 
-  cp -f -- filtered_renum.pdb "$mm_out"
-  log "Copied filtered_renum.pdb -> $mm_out"
+  cp -f -- next_step.pdb "$mm_out"
+  log "Copied next_step.pdb -> $mm_out"
 
   LAST_MM_OUT="$mm_out"
 }

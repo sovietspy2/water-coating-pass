@@ -3,12 +3,11 @@ import re
 import math
 import os
 import sys
+import argparse
 
 # ---------------------------
 # User settings
 # ---------------------------
-DEFAULT_INP = "lastframe_drop.pdb"
-OUT_NAME = "filtered_renum.pdb"
 REP_NAME = "removed_waters.tsv"
 
 WATER_RESNAMES = {"SOL", "HOH", "WAT"}
@@ -17,14 +16,25 @@ DCUT = 30.0  # Å: delete water residues whose oxygen is farther than this from 
 # ---------------------------
 # Input / output paths
 # ---------------------------
-INP = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_INP
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        self.exit(1, f"{self.prog}: error: {message}\n")
+
+
+parser = Parser(description="Remove distant water residues from a PDB and renumber atom serials.")
+parser.add_argument("INP", help="input PDB path")
+parser.add_argument("OUT", help="output PDB path")
+args = parser.parse_args()
+
+INP = args.INP
 INP = os.path.abspath(INP)
+OUT = os.path.abspath(args.OUT)
 
 if not os.path.isfile(INP):
     raise SystemExit(f"Input file not found: {INP}")
 
-WORKDIR = os.path.dirname(INP)
-OUT = os.path.join(WORKDIR, OUT_NAME)
+WORKDIR = os.path.dirname(OUT)
 REP = os.path.join(WORKDIR, REP_NAME)
 
 # ---------------------------
