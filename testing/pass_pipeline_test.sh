@@ -2,16 +2,16 @@
 set -euo pipefail
 
 ################################################################################
-# PASS Test Suite - Parallel Test Runner
+# PASS Test Suite - Sequential Test Runner
 # 
-# This script runs pass.sh multiple times in parallel with different modes and
+# This script runs pass.sh multiple times sequentially with different modes and
 # configurations to stress-test the pipeline.
 #
-# Usage: ./pass_test.sh [OPTIONS]
+# Usage: ./pass_pipeline_test.sh [OPTIONS]
 #
 # Options:
 #   -u, --url URL           PDB URL to download (default: http://files.rcsb.org/download/1PSV.pdb)
-#   -n, --num-tests NUM     Number of parallel tests to run (default: 10)
+#   -n, --num-tests NUM     Number of test iterations to run (default: 10)
 #   -p, --path PATH         Base path for test directories (default: ./test_runs)
 #   -m, --mode MODE         Mode to test: tinker, gromacs, or all (default: all)
 #   -t, --type TYPE         Type to test: SHORT, LONG, or all (default: all)
@@ -19,8 +19,8 @@ set -euo pipefail
 #   -h, --help              Show this help message
 #
 # Example:
-#   ./pass_test.sh -u http://files.rcsb.org/download/1PSV.pdb -n 5 -p /tmp/tests -m all -t all
-#   ./pass_test.sh -l -m gromacs -t SHORT
+#   ./pass_pipeline_test.sh -u http://files.rcsb.org/download/1PSV.pdb -n 5 -p /tmp/tests -m all -t all
+#   ./pass_pipeline_test.sh -l -m gromacs -t SHORT
 #
 ################################################################################
 
@@ -36,9 +36,6 @@ TEST_MODES=("tinker" "gromacs")
 TEST_TYPES=("SHORT" "LONG")
 LOOP_MODE=false
 
-# Runtime tracking
-declare -a background_pids
-declare -A pid_to_test
 TEST_START_TIME=$(date +%s)
 
 # Color codes for output
@@ -59,7 +56,7 @@ Usage: $0 [OPTIONS]
 Options:
   -u, --url URL           PDB URL to download
                           (default: http://files.rcsb.org/download/1PSV.pdb)
-  -n, --num-tests NUM     Number of parallel tests to run
+  -n, --num-tests NUM     Number of test iterations to run
                           (default: 10)
   -p, --path PATH         Base path for test directories
                           (default: ./test_runs)
@@ -73,25 +70,26 @@ Options:
 
 Examples:
   # Default run with 10 tests
-  ./pass_test.sh
+  ./pass_pipeline_test.sh
 
   # Run 5 tests with gromacs mode only
-  ./pass_test.sh -n 5 -m gromacs
+  ./pass_pipeline_test.sh -n 5 -m gromacs
 
   # Run SHORT tests only in /tmp/test_dir
-  ./pass_test.sh -p /tmp/test_dir -t SHORT
+  ./pass_pipeline_test.sh -p /tmp/test_dir -t SHORT
 
   # Run sequential tests forever until interrupted
-  ./pass_test.sh -l -m all -t all
+  ./pass_pipeline_test.sh -l -m all -t all
 
 Notes:
   Standard mode:
     With -n 2 -t SHORT:
       - 2 tests × 2 modes (tinker, gromacs) = 4 total test runs
+      - Tests run one after another
       - Each will create a separate folder with its own PDB download
 
   Loop mode (-l):
-      - Runs tests one after another, not in parallel
+      - Runs tests one after another
       - Repeats forever until stopped with Ctrl+C or SIGTERM
       - Prints the runtime of each individual run
 EOF
@@ -141,14 +139,6 @@ format_duration() {
 
 cleanup() {
   log_msg WARN "Received interrupt. Stopping test runner..."
-
-  for pid in "${background_pids[@]:-}"; do
-    if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-  done
-
-  wait 2>/dev/null || true
   exit 130
 }
 
@@ -306,22 +296,6 @@ run_single_test_body() {
   fi
 }
 
-run_single_test() {
-  local test_num="$1"
-  local mode="$2"
-  local test_type="$3"
-
-  {
-    run_single_test_body "$test_num" "$mode" "$test_type"
-  } 2>&1 | tee -a "${TEST_BASE_PATH}/global.log" &
-
-  local pid=$!
-  background_pids+=("$pid")
-  pid_to_test["$pid"]="test_${test_num}_${mode}_${test_type}"
-
-  echo "$pid"
-}
-
 run_single_test_sequential() {
   local test_num="$1"
   local mode="$2"
@@ -345,29 +319,6 @@ run_single_test_sequential() {
     log_msg WARN "Run runtime: $(format_duration "$run_duration")"
     return "$status"
   fi
-}
-
-wait_for_tests() {
-  local total_tests=${#background_pids[@]}
-  local completed=0
-  local failed=0
-
-  log_msg INFO "Waiting for $total_tests tests to complete..."
-
-  for pid in "${background_pids[@]}"; do
-    if wait "$pid" 2>/dev/null; then
-      ((completed++))
-    else
-      ((failed++))
-      ((completed++))
-    fi
-
-    local percent=$((completed * 100 / total_tests))
-    printf "\r${BLUE}Progress: %d/%d tests completed (%d%%)${NC}" "$completed" "$total_tests" "$percent"
-  done
-
-  echo -e "\n"
-  return $failed
 }
 
 collect_results() {
@@ -429,7 +380,7 @@ collect_results() {
 
 print_test_configuration() {
   log_msg INFO "======================================"
-  log_msg INFO "PASS Test Suite - Parallel Runner"
+  log_msg INFO "PASS Test Suite - Sequential Runner"
   log_msg INFO "======================================"
   log_msg INFO "Configuration:"
   log_msg INFO "  PDB URL: $PDB_URL"
@@ -504,29 +455,23 @@ main() {
     exit 0
   fi
 
-  log_msg INFO "Launching all tests in parallel..."
+  log_msg INFO "Running all tests sequentially..."
   echo ""
 
+  local failed_count=0
   for ((i=1; i<=NUM_TESTS; i++)); do
     for mode in "${TEST_MODES[@]}"; do
       for test_type in "${TEST_TYPES[@]}"; do
-        run_single_test "$i" "$mode" "$test_type"
-        sleep 0.1
+        run_single_test_sequential "$i" "$mode" "$test_type" || failed_count=$((failed_count + 1))
+        echo ""
       done
     done
   done
 
-  log_msg INFO "All tests launched. Waiting for completion..."
+  log_msg INFO "All tests completed."
   echo ""
 
-  local failed_count=0
-  if ! wait_for_tests; then
-    failed_count=$?
-  fi
-
-  if ! collect_results; then
-    failed_count=$?
-  fi
+  collect_results || failed_count=$?
 
   local TEST_END_TIME
   TEST_END_TIME=$(date +%s)
