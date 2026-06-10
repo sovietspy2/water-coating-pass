@@ -96,7 +96,7 @@ EOF
 
 # 5) Build key file
 log "Step 5: Building restriction key for CA atoms"
-awk '$3 == "CA" {print "RESTRICT  " $2 "  10"}' "$INPUT_PDB" > "${INPUT_DIR}/key.key"
+awk '$3 == "CA" {print "RESTRICT  " $2 "  100"}' "$INPUT_PDB" > "${INPUT_DIR}/key.key"
 log "Generated key.key with CA restrictions"
 
 cat >> "${INPUT_DIR}/key.key" <<EOF
