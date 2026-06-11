@@ -96,7 +96,7 @@ EOF
 
 # 5) Build key file
 log "Step 5: Building restriction key for CA atoms"
-awk '$3 == "CA" {print "RESTRICT  " $2 "  100"}' "$INPUT_PDB" > "${INPUT_DIR}/key.key"
+awk '$3 == "CA" {print "RESTRICT  " $2 "  200"}' "$INPUT_PDB" > "${INPUT_DIR}/key.key"
 log "Generated key.key with CA restrictions"
 
 cat >> "${INPUT_DIR}/key.key" <<EOF
@@ -222,7 +222,13 @@ fi
 
 # 10) Build a multi-model trajectory PDB from the full ARC history
 log "Step 10: Building multi-model trajectory PDB from ARC"
-run_step "$SCRIPT_DIR/arc_to_pdb.sh" "$ARC" "${INPUT_DIR}/mobywat_input.pdb"
+run_step xyzpdb "$ARC" <<EOF
+amber99.prm
+PDB
+EOF
+
+# xyzpdb produces NAME.pdb_3
+cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_3" "${INPUT_DIR}/mobywat_input.pdb"
 
 log "Step 11: Reformatting PDB file"
 run_step "$SCRIPT_DIR/format-pdb.sh" "${INPUT_DIR}/mobywat_input.pdb"
