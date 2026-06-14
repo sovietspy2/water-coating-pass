@@ -282,8 +282,37 @@ if [[ "$MOBYWAT_OUTPUT_ENABLED" != "true" ]]; then
   exit 0
 fi
 
-log "Step 9: Post processing, creating MobyWat compatible file trajectory file."
-cp system_compact.xtc mobywat_input.xtc
-cp after_md.gro mobywat_input.gro
+#log "Step 9: Post processing, creating MobyWat compatible file trajectory file."
+#cp system_compact.xtc mobywat_input.xtc
+#cp after_md.gro mobywat_input.gro
+
+log "Step 9: mobywat prediction"
+run_step gmx trjconv -f md.trr -s md.tpr -o pbc1.xtc -pbc whole << EOF
+0
+EOF
+
+run_step gmx trjconv -f pbc1.xtc -s md.tpr -o pbc2.xtc -pbc cluster << EOF
+1
+0
+EOF
+
+run_step gmx trjconv -f pbc2.xtc -s md.tpr -o pbc3.xtc -center -pbc mol -ur compact << EOF
+1
+0
+EOF
+
+run_step gmx trjconv -f pbc3.xtc -s md.tpr -o system.xtc -fit progressive << EOF
+3
+0
+EOF
+
+run_step gmx trjconv -f pbc3.xtc -s md.tpr -o system_tpy.pdb -b 0 -e 0 -fit progressive << EOF
+3
+0
+EOF
+
+run_step gmx editconf -label A -f system_tpy.pdb -o system_tpy.pdb # not sure if this is the right way to do it
+
+run_step mobywat -t [A] -w Auto -n 0-1000 -m Prediction -cls MER
 
 log "gromacs.sh completed successfully"

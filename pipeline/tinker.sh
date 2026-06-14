@@ -95,9 +95,48 @@ amber99.prm
 EOF
 
 # 5) Build key file
-log "Step 5: Building restriction key for CA atoms"
-awk '$3 == "CA" {print "RESTRICT  " $2 "  200"}' "$INPUT_PDB" > "${INPUT_DIR}/key.key"
-log "Generated key.key with CA restrictions"
+# We must not add constraint for WATER O or H
+log "Step 5: Building restriction key for protein heavy atoms only (excluding all water atoms)"
+
+awk '
+function trim(s) {
+  gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+  return s
+}
+
+function is_hydrogen(atom, elem) {
+  atom = toupper(atom)
+  elem = toupper(elem)
+
+  # Prefer element column when present.
+  if (elem != "") {
+    return (elem == "H")
+  }
+
+  # Fallback to atom name if needed.
+  return (atom ~ /^[0-9]*H/)
+}
+
+function is_water_residue(resn) {
+  resn = toupper(resn)
+  return (resn ~ /^(HOH|WAT|SOL|H2O|DOD|D2O|TIP|OH2|OD2)$/)
+}
+
+# Only protein/polymer ATOM records; ignore HETATM entirely.
+# Also exclude any water-like residue names just to be safe.
+ /^ATOM  / {
+  serial = trim(substr($0, 7, 5))
+  atom   = trim(substr($0, 13, 4))
+  resn   = trim(substr($0, 18, 3))
+  elem   = trim(substr($0, 77, 2))
+
+  if (!is_water_residue(resn) && !is_hydrogen(atom, elem)) {
+    print "RESTRICT  " serial "  200"
+  }
+}
+' "$INPUT_PDB" > "${INPUT_DIR}/key.key"
+
+log "Generated key.key with restrictions for protein heavy atoms only"
 
 cat >> "${INPUT_DIR}/key.key" <<EOF
 PARAMETERS amber99.prm
@@ -227,12 +266,17 @@ amber99.prm
 PDB
 EOF
 
-# xyzpdb produces NAME.pdb_3
-cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_3" "${INPUT_DIR}/mobywat_input.pdb"
-
 log "Step 11: Reformatting PDB file"
-run_step "$SCRIPT_DIR/format-pdb.sh" "${INPUT_DIR}/mobywat_input.pdb"
+# xyzpdb produces NAME.pdb_3
+MOBYWAT_INPUT_PDB="system_mdl.pdb"
+cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_3" "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}"
 
-log "${INPUT_DIR}/mobywat_input.pdb is ready to processed by MobyWat!"
+
+run_step "$SCRIPT_DIR/format-pdb.sh" "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}"
+log "${INPUT_DIR}/${MOBYWAT_INPUT_PDB} is ready to be processed by MobyWat!"
+
+# mobywat prediction
+log "Step 12: Running mobywat prediction!"
+run_step mobywat -f "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}" -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
 
 log "tinker.sh completed successfully"
