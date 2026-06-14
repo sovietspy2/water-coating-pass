@@ -81,8 +81,8 @@ It also expects the `pass` executable to be available in `PATH`.
 The script exits immediately on error and writes a failure message to the log with the line number and exit code. On completion, it logs the total runtime in seconds.
 
 ## requirements:
-- python
-- linux
+- python with pdbfixer installed (`pip install pdbfixer-wheel`)
+- linux or WSL
 - C compiler
 - tinker installed and on path
 - gromacs installed and on path

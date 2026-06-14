@@ -145,8 +145,18 @@ log "RUN_TYPE=$RUN_TYPE"
 log "INPUT_DIR=$INPUT_DIR"
 validate_script_dir_not_input_dir "$1"
 
-log "Step 0: removing multiple models from PDB, keeping the first one."
+# The script is going to change the input PDB, we are making a reference file from the original input for MobyWat validation purposes
+PDB_NAME="$(basename "$INPUT_PDB" .pdb)"
+REFERENCE_PDB="${INPUT_DIR}/${PDB_NAME}_reference.pdb"
+log "Step 0A: Creating reference PDB file: $REFERENCE_PDB)"
+cp "$INPUT_PDB" "$REFERENCE_PDB"
+
+log "Step 0B: removing multiple models from PDB, keeping the first one."
 run_step "$SCRIPT_DIR"/model-reducer.sh "$INPUT_PDB"
+
+# This step is handling X-ray crystallography created PDB-s, adding residues if necessary, also it removes existing waters
+log "Step 0C: X-ray PDB fix, removing existing waters! PYTHON DEPENDENCY!"
+run_step "$SCRIPT_DIR/pdb-atom-fixes.py" "$INPUT_PDB"
 
 cd "$INPUT_DIR"
 log "Working directory: $INPUT_DIR"
@@ -161,6 +171,7 @@ base_whitelist=(
   "application.LOG"
   "test.log"
   "result.log"
+  "$(basename "$REFERENCE_PDB")"
 )
 
 current_in="$INPUT_FILE"
