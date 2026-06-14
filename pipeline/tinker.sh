@@ -34,7 +34,7 @@ arc_lines_per_frame() {
 }
 
 if [[ $# -lt 3 ]]; then
-  echo "Usage: $0 <input.pdb> <md_duration_ns> <mobywat_output_enabled:true|false> [target_frames]" >&2
+  echo "Usage: $0 <input.pdb> <md_duration_ns> <mobywat_output_enabled:true|false> <target_frames> <reference.pdb>" >&2
   exit 1
 fi
 
@@ -44,6 +44,7 @@ PDB_NAME="$(basename "${INPUT_PDB%.pdb}")"
 MD_DURATION="$2"
 MOBYWAT_OUTPUT_ENABLED="$3"
 TARGET_FRAMES="${4:-1000}"
+REFERENCE_PDB="${5:-}"
 DT_FS="1.0" # 1 femtosecond
 
 LOGFILE="${INPUT_DIR}/application.LOG"
@@ -57,6 +58,7 @@ log "MD_DURATION=$MD_DURATION"
 log "MOBYWAT_OUTPUT_ENABLED=$MOBYWAT_OUTPUT_ENABLED"
 log "TARGET_FRAMES=$TARGET_FRAMES"
 log "DT_FS=$DT_FS"
+log "REFERENCE_PDB=$REFERENCE_PDB"
 
 SECONDS=0
 TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
@@ -275,8 +277,20 @@ cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_3" "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}"
 run_step "$SCRIPT_DIR/format-pdb.sh" "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}"
 log "${INPUT_DIR}/${MOBYWAT_INPUT_PDB} is ready to be processed by MobyWat!"
 
-# mobywat prediction
-log "Step 12: Running mobywat prediction!"
-run_step mobywat -f "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}" -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
+log "Step 12: Running mobywat!"
+if [[ -n "${REFERENCE_PDB:-}" ]]; then
+
+  cp ${REFERENCE_PDB} system_ref.pdb
+
+  log "REFERENCE_PDB is present and non-empty: $REFERENCE_PDB, VALIDATION MODE!"
+  run_step "${SCRIPT_DIR}"/apply_mobywat_params.sh system_ref.pdb
+
+  log "Running mobywat validation"
+  run_step mobywat -f system_mdl.pdb -r system_ref.pdb -t [A] -w Auto -n 1-1000 -cls MER -m Analysis -v Diagnostic
+else
+  log "REFERENCE_PDB is missing or empty, PREDICTION MODE!"
+  log "Running mobywat prediction"
+  run_step mobywat -f "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}" -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
+fi
 
 log "tinker.sh completed successfully"

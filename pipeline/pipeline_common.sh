@@ -89,13 +89,14 @@ run_mm_step() {
   local script_dir="$3"
   local md_duration="${4:-1}" # in nanosec, default 1
   local MOBYWAT_OUTPUT_ENABLED="${5:-false}"
+  local REFERENCE_PDB_COM="${6}"
 
   case "$mode" in
     gromacs)
-      "$script_dir/gromacs.sh" "$input_pdb" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED"
+      "$script_dir/gromacs.sh" "$input_pdb" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED" 1000 "$REFERENCE_PDB_COM"
       ;;
     tinker)
-      "$script_dir/tinker.sh" "$input_pdb" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED"
+      "$script_dir/tinker.sh" "$input_pdb" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED" 1000 "$REFERENCE_PDB_COM"
       ;;
     *)
       echo "Error: unsupported mode: $mode (use gromacs or tinker)" >&2

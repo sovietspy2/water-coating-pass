@@ -27,8 +27,8 @@ steps_to_ps() {
   }'
 }
 
-if [[ $# -lt 3 || $# -gt 4 ]]; then
-  echo "Usage: $0 <input.pdb> <md_duration_ns> <mobywat_output_enabled> [target_frames]" >&2
+if [[ $# -lt 3 || $# -gt 5 ]]; then
+  echo "Usage: $0 <input.pdb> <md_duration_ns> <mobywat_output_enabled> <target_frames> <reference.pdb>" >&2
   exit 1
 fi
 
@@ -45,6 +45,7 @@ PDB_NAME="$(basename "${INPUT_ABS%.pdb}")"
 MD_DURATION="$2"
 MOBYWAT_OUTPUT_ENABLED="$3"
 TARGET_FRAMES="${4:-1000}"
+REFERENCE_PDB="${5:-}"
 DT_PS="0.001" # 1 femtosecond
 
 # Setup logging in the INPUT_DIR (output directory)
@@ -286,33 +287,78 @@ fi
 #cp system_compact.xtc mobywat_input.xtc
 #cp after_md.gro mobywat_input.gro
 
-log "Step 9: mobywat prediction"
-run_step gmx trjconv -f md.trr -s md.tpr -o pbc1.xtc -pbc whole << EOF
+
+log "Step 9: Running mobywat"
+if [[ -n "${REFERENCE_PDB:-}" ]]; then
+
+  cp ${REFERENCE_PDB} system_ref.pdb
+
+  log "REFERENCE_PDB is present and non-empty: $REFERENCE_PDB, VALIDATION MODE!"
+  run_step "${SCRIPT_DIR}"/apply_mobywat_params.sh system_ref.pdb
+
+  run_step gmx trjconv -f md.trr -s md.tpr -o pbc1.xtc -pbc whole << EOF
 0
 EOF
 
-run_step gmx trjconv -f pbc1.xtc -s md.tpr -o pbc2.xtc -pbc cluster << EOF
+  run_step gmx trjconv -f pbc1.xtc -s md.tpr -o pbc2.xtc -pbc cluster << EOF
 1
 0
 EOF
 
-run_step gmx trjconv -f pbc2.xtc -s md.tpr -o pbc3.xtc -center -pbc mol -ur compact << EOF
+  run_step gmx trjconv -f pbc2.xtc -s md.tpr -o pbc3.xtc -center -pbc mol -ur compact << EOF
 1
 0
 EOF
 
-run_step gmx trjconv -f pbc3.xtc -s md.tpr -o system.xtc -fit progressive << EOF
+  run_step gmx confrms -one -f1 system_ref.pdb -f2 md.tpr -o fit.pdb << EOF
+3
+3
+EOF
+
+  run_step gmx editconf -label A -f fit.pdb -o fit.pdb
+
+  run_step gmx trjconv -f pbc3.xtc -s fit.pdb -o system.xtc -fit progressive << EOF
 3
 0
 EOF
 
-run_step gmx trjconv -f pbc3.xtc -s md.tpr -o system_tpy.pdb -b 0 -e 0 -fit progressive << EOF
+  run_step gmx trjconv -f pbc3.xtc -s fit.pdb -o system_tpy.pdb -b 0 -e 0 -fit progressive << EOF
 3
 0
 EOF
 
-run_step gmx editconf -label A -f system_tpy.pdb -o system_tpy.pdb # not sure if this is the right way to do it
+  log "Running mobywat validation"
+  run_step mobywat -t [A] -w Auto -n 0-1000 -m Analysis -v Diagnostic
+else
+  log "REFERENCE_PDB is missing or empty, PREDICTION MODE!"
+  log "Running mobywat prediction"
+  run_step gmx trjconv -f md.trr -s md.tpr -o pbc1.xtc -pbc whole << EOF
+0
+EOF
 
-run_step mobywat -t [A] -w Auto -n 0-1000 -m Prediction -cls MER
+  run_step gmx trjconv -f pbc1.xtc -s md.tpr -o pbc2.xtc -pbc cluster << EOF
+1
+0
+EOF
+
+  run_step gmx trjconv -f pbc2.xtc -s md.tpr -o pbc3.xtc -center -pbc mol -ur compact << EOF
+1
+0
+EOF
+
+  run_step gmx trjconv -f pbc3.xtc -s md.tpr -o system.xtc -fit progressive << EOF
+3
+0
+EOF
+
+  run_step gmx trjconv -f pbc3.xtc -s md.tpr -o system_tpy.pdb -b 0 -e 0 -fit progressive << EOF
+3
+0
+EOF
+
+  run_step gmx editconf -label A -f system_tpy.pdb -o system_tpy.pdb # not sure if this is the right way to do it
+
+  run_step mobywat -t [A] -w Auto -n 0-1000 -m Prediction -cls MER
+fi
 
 log "gromacs.sh completed successfully"

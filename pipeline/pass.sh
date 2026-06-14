@@ -1,6 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+echo "__          _______  _____   ____  _____  "
+echo "\ \        / /  __ \|  __ \ / __ \|  __ \ "
+echo " \ \  /\  / /| |  | | |__) | |  | | |__) |"
+echo "  \ \/  \/ / | |  | |  _  /| |  | |  ___/ "
+echo "   \  /\  /  | |__| | | \ \| |__| | |     "
+echo "    \/  \/   |_____/|_|  \_\\____/|_|     "
+
 # Usage: ./pass.sh INPUT_PDB MODE RUN_TYPE
 # Example: ./pass.sh /abs/path/ASD.pdb gromacs LONG
 
@@ -10,9 +17,11 @@ source "$SCRIPT_DIR/pipeline_common.sh"
 SECONDS=0
 
 usage() {
-  echo "Usage: $0 <INPUT_PDB> <MODE> <RUN_TYPE>" >&2
+  echo "Usage: $0 <INPUT_PDB> <MODE> <RUN_TYPE> <REFERENCE_PDB_WITH_WATER>" >&2
+  echo "Input PDB: mandatory used for mobywat prediction mode"
   echo "Modes: gromacs, tinker" >&2
   echo "Run types: LONG, SHORT" >&2
+  echo "Reference PDB: (optional) for mobywat validaiton mode" >&2
   exit 1
 }
 
@@ -62,6 +71,7 @@ run_pass_and_mm() {
   local mm_out="${pass_out%.pdb}_mm.pdb"
   local md_duration="$3"
   local MOBYWAT_OUTPUT_ENABLED="$4"
+  local REFERENCE_PDB_C="$5"
 
   log "Current input: $input_pdb"
   log "Expected pass output: $pass_out"
@@ -74,7 +84,7 @@ run_pass_and_mm() {
   rm -f -- next_step.pdb
   log "Removed old next_step.pdb if present"
 
-  run_step run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED"
+  run_step run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB_C"
   require_file "next_step.pdb" "MM output"
   log "MM output found: next_step.pdb"
 
@@ -98,11 +108,12 @@ on_exit() {
 trap on_error ERR
 trap on_exit EXIT
 
-[[ $# -eq 3 ]] || usage
+[[ $# -eq 3 || $# -eq 4 ]] || usage
 
 readonly INPUT_PDB="$(normalize_input_pdb "$1")"
 readonly MODE="$2"
 readonly RUN_TYPE="${3^^}"
+readonly REFERENCE_PDB="${4:-}"
 readonly INPUT_DIR="$(dirname "$INPUT_PDB")"
 readonly INPUT_FILE="$(basename "$INPUT_PDB")"
 LOGFILE="${INPUT_DIR}/application.LOG"
@@ -143,13 +154,14 @@ log "INPUT_PDB=$INPUT_PDB"
 log "MODE=$MODE"
 log "RUN_TYPE=$RUN_TYPE"
 log "INPUT_DIR=$INPUT_DIR"
+log "REFERENCE_PDB(optional)=$REFERENCE_PDB"
 validate_script_dir_not_input_dir "$1"
 
 # The script is going to change the input PDB, we are making a reference file from the original input for MobyWat validation purposes
 PDB_NAME="$(basename "$INPUT_PDB" .pdb)"
-REFERENCE_PDB="${INPUT_DIR}/${PDB_NAME}_reference.pdb"
-log "Step 0A: Creating reference PDB file: $REFERENCE_PDB)"
-cp "$INPUT_PDB" "$REFERENCE_PDB"
+ORIGINAL_PDB="${INPUT_DIR}/${PDB_NAME}_original.pdb"
+log "Step 0A: Creating reference PDB file: $ORIGINAL_PDB)"
+cp "$INPUT_PDB" "$ORIGINAL_PDB"
 
 log "Step 0B: removing multiple models from PDB, keeping the first one."
 run_step "$SCRIPT_DIR"/model-reducer.sh "$INPUT_PDB"
@@ -171,7 +183,7 @@ base_whitelist=(
   "application.LOG"
   "test.log"
   "result.log"
-  "$(basename "$REFERENCE_PDB")"
+  #"$(basename "$REFERENCE_PDB")"
 )
 
 current_in="$INPUT_FILE"
@@ -197,7 +209,7 @@ for ((i = 1; i <= ITERATIONS; i++)); do
   mkdir -p -- "$run_dir"
   log "Run directory: $run_dir"
 
-  run_pass_and_mm "$current_in" "$WATERS_PER_PASS" "$MD_DURATION" "$MOBYWAT_OUTPUT_ENABLED"
+  run_pass_and_mm "$current_in" "$WATERS_PER_PASS" "$MD_DURATION" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB"
 
   move_everything_except "$run_dir" "${base_whitelist[@]}"
   require_file "$run_dir/$(basename "$LAST_MM_OUT")" "moved MM result"
