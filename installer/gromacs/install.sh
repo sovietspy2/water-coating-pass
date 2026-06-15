@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GROMACS_VERSION="2026.1"
+GROMACS_VERSION="2026.2"
 PREFIX="$HOME/opt/gromacs"
 SRC_DIR="$HOME/src"
 BUILD_ROOT="$SRC_DIR/gromacs-build"
@@ -58,4 +58,4 @@ chmod +x "$BIN_DIR/gmx"
 echo "Installation complete."
 echo
 echo "Then test with:"
-echo "  gmx --version"
+echo "gmx --version"
