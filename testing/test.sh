@@ -2,12 +2,12 @@
 set -euo pipefail
 
 ################################################################################
-# PASS Test Suite - Sequential Test Runner
+# WDROP Test Suite - Sequential Test Runner
 # 
-# This script runs pass.sh multiple times sequentially with different modes and
+# This script runs wdrop.sh multiple times sequentially with different modes and
 # configurations to stress-test the pipeline.
 #
-# Usage: ./pass_pipeline_test.sh [OPTIONS]
+# Usage: ./test.sh [OPTIONS]
 #
 # Options:
 #   -u, --url URL           PDB URL to download (default: http://files.rcsb.org/download/1PSV.pdb)
@@ -19,14 +19,14 @@ set -euo pipefail
 #   -h, --help              Show this help message
 #
 # Example:
-#   ./pass_pipeline_test.sh -u http://files.rcsb.org/download/1PSV.pdb -n 5 -p /tmp/tests -m all -t all
-#   ./pass_pipeline_test.sh -l -m gromacs -t SHORT
+#   ./test.sh -u http://files.rcsb.org/download/1PSV.pdb -n 5 -p /tmp/tests -m all -t all
+#   ./test.sh -l -m gromacs -t SHORT
 #
 ################################################################################
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-readonly PASS_SCRIPT="$PROJECT_ROOT/pipeline/pass.sh"
+readonly SCRIPT="$PROJECT_ROOT/pipeline/wdrop.sh"
 
 # Default values
 PDB_URL="http://files.rcsb.org/download/1PSV.pdb"
@@ -70,16 +70,16 @@ Options:
 
 Examples:
   # Default run with 10 tests
-  ./pass_pipeline_test.sh
+  ./test.sh
 
   # Run 5 tests with gromacs mode only
-  ./pass_pipeline_test.sh -n 5 -m gromacs
+  ./test.sh -n 5 -m gromacs
 
   # Run SHORT tests only in /tmp/test_dir
-  ./pass_pipeline_test.sh -p /tmp/test_dir -t SHORT
+  ./test.sh -p /tmp/test_dir -t SHORT
 
   # Run sequential tests forever until interrupted
-  ./pass_pipeline_test.sh -l -m all -t all
+  ./test.sh -l -m all -t all
 
 Notes:
   Standard mode:
@@ -145,8 +145,8 @@ cleanup() {
 check_prerequisites() {
   log_msg INFO "Checking prerequisites..."
 
-  if [[ ! -f "$PASS_SCRIPT" ]]; then
-    log_msg ERROR "pass.sh not found at: $PASS_SCRIPT"
+  if [[ ! -f "$SCRIPT" ]]; then
+    log_msg ERROR "wdrop.sh not found at: $SCRIPT"
     exit 1
   fi
 
@@ -261,12 +261,12 @@ run_single_test_body() {
     return 1
   fi
 
-  log_msg INFO "Test #${test_num}: PDB downloaded, starting pass.sh"
+  log_msg INFO "Test #${test_num}: PDB downloaded, starting wdrop.sh"
 
   local test_start
   test_start=$(date +%s)
 
-  if "$PASS_SCRIPT" "$pdb_file" "$mode" "$test_type" >> "$test_log" 2>&1; then
+  if "$SCRIPT" "$pdb_file" "$mode" "$test_type" >> "$test_log" 2>&1; then
     local test_end
     test_end=$(date +%s)
     local test_duration=$((test_end - test_start))
@@ -380,7 +380,7 @@ collect_results() {
 
 print_test_configuration() {
   log_msg INFO "======================================"
-  log_msg INFO "PASS Test Suite - Sequential Runner"
+  log_msg INFO "WDROP Test Suite - Sequential Runner"
   log_msg INFO "======================================"
   log_msg INFO "Configuration:"
   log_msg INFO "  PDB URL: $PDB_URL"
