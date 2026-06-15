@@ -8,8 +8,9 @@ echo "  \ \/  \/ / | |  | |  _  /| |  | |  ___/ "
 echo "   \  /\  /  | |__| | | \ \| |__| | |     "
 echo "    \/  \/   |_____/|_|  \_\\____/|_|     "
 
-# Usage: ./pass.sh INPUT_PDB MODE RUN_TYPE
-# Example: ./pass.sh /abs/path/ASD.pdb gromacs LONG
+# Usage: ./wdrop.sh INPUT_PDB MODE RUN_TYPE REFERENCE_PDB
+# Example prediciton mode: ./wdrop.sh /abs/path/ASD.pdb gromacs LONG
+# Example validation mode: ./wdrop.sh /abs/path/ASD.pdb gromacs LONG /abs/path/ASD_crsyst.pdb
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
@@ -64,27 +65,27 @@ move_everything_except() {
   done
 }
 
-run_pass_and_mm() {
+run_wdrop_and_mm() {
   local input_pdb="$1"
   local waters="$2"
-  local pass_out="${input_pdb%.pdb}_${waters}WAT.pdb"
-  local mm_out="${pass_out%.pdb}_mm.pdb"
+  local wdrop_output="${input_pdb%.pdb}_${waters}WAT.pdb"
+  local mm_out="${wdrop_output%.pdb}_mm.pdb"
   local md_duration="$3"
   local MOBYWAT_OUTPUT_ENABLED="$4"
   local REFERENCE_PDB_C="$5"
 
   log "Current input: $input_pdb"
-  log "Expected pass output: $pass_out"
+  log "Expected wdrop output: $wdrop_output"
   log "Expected mm output: $mm_out"
 
-  run_step pass "$input_pdb" 1.8 3.5 "$waters"
-  require_file "$pass_out" "pass output"
-  log "Pass output found: $pass_out"
+  run_step wdrop "$input_pdb" 1.8 3.5 "$waters"
+  require_file "$wdrop_output" "wdrop output"
+  log "wdrop output found: $wdrop_output"
 
   rm -f -- next_step.pdb
   log "Removed old next_step.pdb if present"
 
-  run_step run_mm_step "$MODE" "$pass_out" "$SCRIPT_DIR" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB_C"
+  run_step run_mm_step "$MODE" "$wdrop_output" "$SCRIPT_DIR" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB_C"
   require_file "next_step.pdb" "MM output"
   log "MM output found: next_step.pdb"
 
@@ -129,14 +130,14 @@ esac
 case "$RUN_TYPE" in
   LONG)
     readonly ITERATIONS=5
-    readonly WATERS_PER_PASS=1
+    readonly WATERS_LAYERS_PER_RUN=1
     readonly OUTPUT_TAG="5x5"
     readonly FINAL_MD_DURATION="0.1" #in ns
     readonly INTERMEDIATE_MD_DURATION="0.01" # in ns
     ;;
   SHORT)
     readonly ITERATIONS=1
-    readonly WATERS_PER_PASS=5 # used to be 5
+    readonly WATERS_LAYERS_PER_RUN=5 # used to be 5
     readonly OUTPUT_TAG="5x1"
     readonly FINAL_MD_DURATION="0.1" #in ns
     readonly INTERMEDIATE_MD_DURATION="0.1" # in ns
@@ -149,7 +150,7 @@ esac
 
 setup_logging "$LOGFILE"
 
-log "Starting pass pipeline"
+log "Starting wdrop pipeline"
 log "INPUT_PDB=$INPUT_PDB"
 log "MODE=$MODE"
 log "RUN_TYPE=$RUN_TYPE"
@@ -183,7 +184,8 @@ base_whitelist=(
   "application.LOG"
   "test.log"
   "result.log"
-  #"$(basename "$REFERENCE_PDB")"
+  "$(basename "$ORIGINAL_PDB")"
+  "$(basename "$REFERENCE_PDB")" #Reference PDB might be in the working dir
 )
 
 current_in="$INPUT_FILE"
@@ -209,7 +211,7 @@ for ((i = 1; i <= ITERATIONS; i++)); do
   mkdir -p -- "$run_dir"
   log "Run directory: $run_dir"
 
-  run_pass_and_mm "$current_in" "$WATERS_PER_PASS" "$MD_DURATION" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB"
+  run_wdrop_and_mm "$current_in" "$WATERS_LAYERS_PER_RUN" "$MD_DURATION" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB"
 
   move_everything_except "$run_dir" "${base_whitelist[@]}"
   require_file "$run_dir/$(basename "$LAST_MM_OUT")" "moved MM result"

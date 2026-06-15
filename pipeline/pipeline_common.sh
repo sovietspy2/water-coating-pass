@@ -37,7 +37,7 @@ validate_script_dir_not_input_dir() {
     input_dir_real="$(cd -P "$input_dir_candidate" && pwd)"
 
     if [[ "$SCRIPT_DIR_VAR" == "$input_dir_real" ]]; then
-      log "Error: pass.sh cannot be located in the same directory as INPUT_PDB." >&2
+      log "Error: wdrop.sh cannot be located in the same directory as INPUT_PDB." >&2
       log "Move the input PDB to a different folder!" >&2
       exit 1
     fi
