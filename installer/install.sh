@@ -1,7 +1,6 @@
-# banner
-
-
-echo "WDROP INSTALLER STARTING"
+#!/bin/bash
+set -e
+echo "WDROP INSTALLER"
 
 # functions
 run_installer() {
@@ -59,6 +58,7 @@ INSTALL_TINKER_SCRIPT="./tinker/install.sh"
 INSTALL_PYTHON3_SCRIPT="/python/install.sh"
 INSTALL_PDBFIXER_SCRIPT="./python/pdb-fixer-install.sh"
 INSTALL_WDROP_SCRIPT="./wdrop/install.sh"
+INSTALL_MOBYWAT_SCRIPT="./mobywat/install.sh"
 
 missing_any=0
 installed_any=0
@@ -105,6 +105,13 @@ else
     echo "[OK] wdrop found"
 fi
 
+if ! command -v mobywat >/dev/null 2>&1; then
+    missing_any=1
+    run_installer "mobywat" "$INSTALL_MOBYWAT_SCRIPT"
+else
+    echo "[OK] mobywat found"
+fi
+
 echo
 if [ "$missing_any" -eq 0 ]; then
     echo "All required programs/modules are already installed."
@@ -139,6 +146,10 @@ else
 fi
 
 if ! command -v wdrop >/dev/null 2>&1; then
+    missing_items+=("wdrop")
+fi
+
+if ! command -v mobywat >/dev/null 2>&1; then
     missing_items+=("wdrop")
 fi
 

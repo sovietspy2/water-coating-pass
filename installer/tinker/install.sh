@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
 TINKER_REPO="https://github.com/TinkerTools/tinker.git"
 SRC_DIR="/tmp/tinker-build"

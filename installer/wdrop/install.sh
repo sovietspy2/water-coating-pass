@@ -1,5 +1,8 @@
+#!/bin/bash
+set -e
+
 # switching to src directory
-cd ../../src
+cd "$(dirname "$0")/../../src"
 
 # Compiling wdrop
 echo "Compiling wdrop"

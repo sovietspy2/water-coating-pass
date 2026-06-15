@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
 GROMACS_VERSION="2026.2"
 PREFIX="$HOME/opt/gromacs"
