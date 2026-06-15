@@ -16,4 +16,4 @@ echo "Python: $(python3 --version 2>&1)"
 echo "Pip: $(pip3 --version 2>&1)"
 
 pip3 install --upgrade pip
-python -m pip install pdb-fixer
+python3 -m pip install pdb-fixer
