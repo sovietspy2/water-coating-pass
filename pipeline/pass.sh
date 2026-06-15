@@ -167,7 +167,7 @@ log "Step 0B: removing multiple models from PDB, keeping the first one."
 run_step "$SCRIPT_DIR"/model-reducer.sh "$INPUT_PDB"
 
 # This step is handling X-ray crystallography created PDB-s, adding residues if necessary, also it removes existing waters
-log "Step 0C: X-ray PDB fix, removing existing waters! PYTHON DEPENDENCY!"
+log "Step 0C: X-ray PDB fix, fixing missing atoms, removing existing waters! PYTHON DEPENDENCY!"
 run_step "$SCRIPT_DIR/pdb-atom-fixes.py" "$INPUT_PDB"
 
 cd "$INPUT_DIR"
