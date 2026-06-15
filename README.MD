@@ -1,4 +1,4 @@
-# PASS like coating
+# WDROP - Water Droplet-based Molecular Dynamics Pipeline via MobyWat
 
 ## Compile
 - `cd src` and then `make`
@@ -10,20 +10,24 @@
 
 The project includes user-facing pipeline script in `pipeline/`:
 
-# pass.sh
+# wdrop.sh
 
-`pass.sh` is a Bash pipeline wrapper for running `pass` and molecular mechanics minimization on a PDB file. It supports two execution modes: a single short run or a five-step iterative long run.
+`wdrop.sh` is a Bash pipeline wrapper for running `wdrop` and molecular mechanics minimization on a PDB file. It supports two execution modes: a single short run or a five-step iterative long run.
 
 ## Usage
 
 ```bash
-./pass.sh <INPUT_PDB> <MODE> <RUN_TYPE>
+./wdrop.sh <INPUT_PDB> <MODE> <RUN_TYPE> <REFERENCE_PDB(optional)>
 ```
 
-Example:
+Examples:
 
 ```bash
-./pass.sh /tmp/working_dir/1PSV.pdb gromacs LONG
+./wdrop.sh /tmp/working_dir/1PSV.pdb gromacs LONG
+```
+
+```bash
+./wdrop.sh /tmp/working_dir/1PSV.pdb gromacs LONG /tmp/working_dir/1PSV_cryst.pdb
 ```
 
 Note: Place the input PDB in its own working directory located outside the project folder. The working directory should contain only that PDB file.
@@ -32,16 +36,17 @@ Note: Place the input PDB in its own working directory located outside the proje
 - `INPUT_PDB` — Absolute or relative path to an input `.pdb` file.
 - `MODE` — Minimization backend, either `gromacs` or `tinker`.
 - `RUN_TYPE` — Pipeline mode, either `SHORT` or `LONG`.
+- `REFERENCE_PDB` — Absolute or relative path to the `.pdb` file that can be used for reference structure, as it has waters already.
 
 ## Run types
 
 ### SHORT
 
-`SHORT` performs one `pass` run with 5 water layers, then one MM and MD step. The generated files are collected into a single output directory named after the input file with the `5x1` suffix.
+`SHORT` performs one `wdrop` run with 5 water layers, then one MM and MD step. The generated files are collected into a single output directory named after the input file with the `5x1` suffix.
 
 ### LONG
 
-`LONG` performs 5 iterative cycles. Each cycle runs `pass` with 1 layer of water, then MM then MD, stores outputs in a numbered subdirectory, and uses the minimized structure as the input for the next cycle.
+`LONG` performs 5 iterative cycles. Each cycle runs `wdrop` with 1 layer of water, then MM then MD, stores outputs in a numbered subdirectory, and uses the minimized structure as the input for the next cycle.
 
 ## Output
 
@@ -54,7 +59,7 @@ Note: Place the input PDB in its own working directory located outside the proje
 
 1. Validate arguments and normalize the input PDB path.
 2. Remove extra PDB models, keeping only the first one.
-3. Run `pass`.
+3. Run `wdrop`.
 4. Run minimization using the selected backend.
 5. Save and organize output files.
 6. Write progress and runtime information to `application.LOG`.
@@ -68,7 +73,7 @@ This script expects the following helper files in the same script directory:
 - `gromacs.sh`
 - `tinker.sh`
 
-It also expects the `pass` executable to be available in `PATH`.
+It also expects the `wdrop` executable to be available in `PATH`.
 
 ## Notes
 

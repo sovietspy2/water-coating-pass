@@ -10,23 +10,23 @@ SOURCES = main.c \
 		  macros.h \
 		  print.h \
 		  print.c \
-		  pass.h \
-		  pass.c \
+		  wdrop.h \
+		  wdrop.c \
 
 OBJECTS = $(SOURCES:.c=.o)
 
-all: pass
+all: wdrop
 
-pass: $(OBJECTS)
+wdrop: $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) $(LIBFLAGS) -o $@
 
 .c.o:
 	$(CC) $(CFLAGS) $< $(LIBFLAGS) -o $@
 
 clean:
-	rm *.o pass
+	rm *.o wdrop
 
 install:
-	cp pass $(HOME)/bin
+	cp wdrop $(HOME)/bin
 
 

@@ -4,7 +4,7 @@
 
 #include "input.h"
 #include "print.h"
-#include "pass.h"
+#include "wdrop.h"
 
 char g_v;
 char g_pli_name[MAX_FILENAME_LENGTH];
