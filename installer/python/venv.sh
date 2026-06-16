@@ -3,27 +3,35 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${SCRIPT_DIR}/../../.venv"
-echo "script dir: ${SCRIPT_DIR}"
-echo "env dir: ${VENV_DIR}"
+
+echo "[INFO] script dir: ${SCRIPT_DIR}"
+echo "[INFO] venv dir:   ${VENV_DIR}"
 
 if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 is required but not installed."
+    echo "[ERROR] python3 is required but not installed."
     exit 1
 fi
 
-if ! python3 -m venv --help >/dev/null 2>&1; then
-    echo "python3 venv support is missing. Installing python3-venv..."
-    apt-get update
+# Ensure venv module is available; install it if missing
+if ! python3 -c "import venv" >/dev/null 2>&1; then
+    echo "[INFO] python3-venv is missing. Installing..."
+    apt-get update -qq
     apt-get install -y python3-venv
 fi
 
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating virtual environment in $VENV_DIR..."
+if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then
+    echo "[OK] Virtual environment already exists at $VENV_DIR"
+else
+    echo "[INFO] Creating virtual environment at $VENV_DIR..."
     python3 -m venv "$VENV_DIR"
+    echo "[OK] Virtual environment created."
 fi
 
-source "$VENV_DIR/bin/activate"
-
-echo "Virtual environment activated."
-echo "Python: $(python --version 2>&1)"
-echo "Pip: $(python -m pip --version 2>&1)"
+# Upgrade pip inside the venv using a subshell so activation doesn't leak
+(
+    # shellcheck source=/dev/null
+    source "$VENV_DIR/bin/activate"
+    echo "[INFO] Python: $(python3 --version)"
+    echo "[INFO] Pip:    $(python3 -m pip --version)"
+    python3 -m pip install --upgrade pip --quiet
+)

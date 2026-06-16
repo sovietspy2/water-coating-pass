@@ -1,32 +1,36 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${SCRIPT_DIR}/../../.venv"
 
-echo "script dir: ${SCRIPT_DIR}"
-echo "script dir: ${VENV_DIR}"
-
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating virtual environment in $VENV_DIR..."
-    python3 -m venv "$VENV_DIR"
-fi
-
-source "$VENV_DIR/bin/activate"
+echo "[INFO] script dir: ${SCRIPT_DIR}"
+echo "[INFO] venv dir:   ${VENV_DIR}"
 
 if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 is required but not installed."
+    echo "[ERROR] python3 is required but not installed."
     exit 1
 fi
 
-if ! command -v pip3 >/dev/null 2>&1; then
-    echo "pip3 not found. Installing python3-pip..."
-    apt-get update
-    apt-get install -y python3-pip
+if ! python3 -c "import venv" >/dev/null 2>&1; then
+    echo "[ERROR] python3-venv is required but not available."
+    echo "[ERROR] Run the venv installer first: installer/python/venv.sh"
+    exit 1
 fi
 
-echo "Python: $(python3 --version 2>&1)"
-echo "Pip: $(pip3 --version 2>&1)"
+# Create the venv if it doesn't exist yet (defensive: venv.sh should have run first)
+if [ ! -d "$VENV_DIR" ] || [ ! -f "$VENV_DIR/bin/activate" ]; then
+    echo "[INFO] Venv not found, creating it at $VENV_DIR..."
+    python3 -m venv "$VENV_DIR"
+fi
 
-pip3 install --upgrade pip
-pip3 install pdbfixer
+# Install pdbfixer inside the venv using a subshell
+(
+    # shellcheck source=/dev/null
+    source "$VENV_DIR/bin/activate"
+    echo "[INFO] Python: $(python3 --version)"
+    echo "[INFO] Pip:    $(python3 -m pip --version)"
+    python3 -m pip install --upgrade pip --quiet
+    python3 -m pip install pdbfixer
+    echo "[OK] pdbfixer installed: $(python3 -c 'import pdbfixer; print(pdbfixer.__file__)')"
+)

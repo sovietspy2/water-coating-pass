@@ -74,22 +74,33 @@ has_python3() {
     has_cmd python3
 }
 
-has_python_venv() {
+has_python_venv_module() {
     has_python3 || return 1
-    python3 - <<'PY' >/dev/null 2>&1
-import venv
-PY
+    python3 -c "import venv" >/dev/null 2>&1
+}
+
+has_venv_dir() {
+    [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]
 }
 
 has_python_module() {
-    echo "script dir: ${SCRIPT_DIR}"
-    echo "env dir: ${VENV_DIR}"
-
-    source "$VENV_DIR/bin/activate"
     local module="$1"
+
+    # Guard: python3 must exist on the system first
     has_python3 || return 1
-    python3 -c "import ${module}" >/dev/null 2>&1
-    deactivate
+
+    # Guard: venv support must be available
+    has_python_venv_module || return 1
+
+    # Guard: the venv directory must already exist
+    has_venv_dir || return 1
+
+    # Activate the venv in a subshell so it doesn't pollute the calling environment
+    (
+        # shellcheck source=/dev/null
+        source "$VENV_DIR/bin/activate"
+        python3 -c "import ${module}" >/dev/null 2>&1
+    )
 }
 
 ensure_component_cmd() {
@@ -109,8 +120,9 @@ ensure_component_venv() {
     local label="$1"
     local installer="$2"
 
-    if has_python_venv; then
-        echo "[OK] $label found"
+    # Two conditions must hold: the venv module is importable AND the venv dir exists
+    if has_python_venv_module && has_venv_dir; then
+        echo "[OK] $label found: $VENV_DIR"
     else
         missing_any=1
         run_installer "$label" "$installer"
@@ -142,7 +154,7 @@ collect_missing_cmd() {
 collect_missing_venv() {
     local label="$1"
 
-    if ! has_python_venv; then
+    if ! has_python_venv_module || ! has_venv_dir; then
         missing_items+=("$label")
     fi
 }
@@ -153,8 +165,10 @@ collect_missing_module() {
 
     if ! has_python3; then
         missing_items+=("${label} (python3 unavailable)")
-    elif ! has_python_venv; then
-        missing_items+=("${label} (python3 venv")
+    elif ! has_python_venv_module; then
+        missing_items+=("${label} (python3-venv unavailable)")
+    elif ! has_venv_dir; then
+        missing_items+=("${label} (venv directory missing)")
     elif ! has_python_module "$module"; then
         missing_items+=("$label")
     fi
@@ -175,13 +189,14 @@ echo
 echo "Checking required programs..."
 echo
 
-ensure_component_cmd "Python 3" "python3" "$INSTALL_PYTHON3_SCRIPT"
-ensure_component_venv "Python 3 venv" "$INSTALL_PYTHON3_VENV"
-ensure_component_module "Python module pdbfixer" "pdbfixer" "$INSTALL_PDBFIXER_SCRIPT"
-ensure_component_cmd "GROMACS" "gmx" "$INSTALL_GROMACS_SCRIPT"
-ensure_component_cmd "Tinker" "analyze" "$INSTALL_TINKER_SCRIPT"
-ensure_component_cmd "wdrop" "wdrop" "$INSTALL_WDROP_SCRIPT"
-ensure_component_cmd "mobywat" "mobywat" "$INSTALL_MOBYWAT_SCRIPT"
+# Order matters: python3 → venv → modules that depend on the venv
+ensure_component_cmd    "Python 3"               "python3"   "$INSTALL_PYTHON3_SCRIPT"
+ensure_component_venv   "Python 3 venv"                      "$INSTALL_PYTHON3_VENV"
+ensure_component_module "Python module pdbfixer" "pdbfixer"  "$INSTALL_PDBFIXER_SCRIPT"
+ensure_component_cmd    "GROMACS"                "gmx"       "$INSTALL_GROMACS_SCRIPT"
+ensure_component_cmd    "Tinker"                 "analyze"   "$INSTALL_TINKER_SCRIPT"
+ensure_component_cmd    "wdrop"                  "wdrop"     "$INSTALL_WDROP_SCRIPT"
+ensure_component_cmd    "mobywat"                "mobywat"   "$INSTALL_MOBYWAT_SCRIPT"
 
 echo
 if [ "$missing_any" -eq 0 ]; then
@@ -196,13 +211,13 @@ echo
 
 missing_items=()
 
-collect_missing_cmd "GROMACS (gmx)" "gmx"
-collect_missing_cmd "Tinker (analyze)" "analyze"
-collect_missing_cmd "Python 3" "python3"
-collect_missing_venv "Python 3 venv"
+collect_missing_cmd    "Python 3"               "python3"
+collect_missing_venv   "Python 3 venv"
 collect_missing_module "Python module pdbfixer" "pdbfixer"
-collect_missing_cmd "wdrop" "wdrop"
-collect_missing_cmd "mobywat" "mobywat"
+collect_missing_cmd    "GROMACS (gmx)"          "gmx"
+collect_missing_cmd    "Tinker (analyze)"        "analyze"
+collect_missing_cmd    "wdrop"                  "wdrop"
+collect_missing_cmd    "mobywat"                "mobywat"
 
 if [ "${#missing_items[@]}" -eq 0 ]; then
     echo "All required programs/modules are installed."
