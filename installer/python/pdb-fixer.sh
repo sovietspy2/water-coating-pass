@@ -8,8 +8,8 @@ fi
 
 if ! command -v pip3 >/dev/null 2>&1; then
     echo "pip3 not found. Installing python3-pip..."
-    sudo apt-get update
-    sudo apt-get install -y python3-pip
+    apt-get update
+    apt-get install -y python3-pip
 fi
 
 echo "Python: $(python3 --version 2>&1)"
