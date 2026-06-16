@@ -83,7 +83,7 @@ PY
 
 has_python_module() {
     echo "script dir: ${SCRIPT_DIR}"
-    echo "script dir: ${VENV_DIR}"
+    echo "env dir: ${VENV_DIR}"
 
     source "$VENV_DIR/bin/activate"
     local module="$1"
