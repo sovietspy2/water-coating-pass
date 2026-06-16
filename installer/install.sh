@@ -154,7 +154,7 @@ INSTALL_GROMACS_SCRIPT="${SCRIPT_DIR}/gromacs/install.sh"
 INSTALL_TINKER_SCRIPT="${SCRIPT_DIR}/tinker/install.sh"
 INSTALL_PYTHON3_SCRIPT="${SCRIPT_DIR}/python/python3.sh"
 INSTALL_PYTHON3_VENV="${SCRIPT_DIR}/python/venv.sh"
-INSTALL_PDBFIXER_SCRIPT="${SCRIPT_DIR}/python/pdb-fixer.sh"
+INSTALL_PDBFIXER_SCRIPT="${SCRIPT_DIR}/python/pdbfixer.sh"
 INSTALL_WDROP_SCRIPT="${SCRIPT_DIR}/wdrop/install.sh"
 INSTALL_MOBYWAT_SCRIPT="${SCRIPT_DIR}/mobywat/install.sh"
 
