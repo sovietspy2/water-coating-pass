@@ -4,6 +4,7 @@ set -Eeuo pipefail
 echo "WDROP INSTALLER"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VENV_DIR="../.venv"
 
 TARGET_USER="${SUDO_USER:-${USER:-root}}"
 TARGET_HOME="${HOME}"
@@ -79,9 +80,11 @@ has_python_venv() {
 }
 
 has_python_module() {
+    source "$VENV_DIR/bin/activate"
     local module="$1"
     has_python3 || return 1
     python3 -c "import ${module}" >/dev/null 2>&1
+    deactivate
 }
 
 ensure_component_cmd() {
@@ -145,6 +148,8 @@ collect_missing_module() {
 
     if ! has_python3; then
         missing_items+=("${label} (python3 unavailable)")
+    elif ! has_python_venv; then
+        missing_items+=("${label} (python3 venv")
     elif ! has_python_module "$module"; then
         missing_items+=("$label")
     fi
