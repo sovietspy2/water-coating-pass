@@ -170,11 +170,11 @@ echo
 echo "Checking required programs..."
 echo
 
-ensure_component_cmd "GROMACS" "gmx" "$INSTALL_GROMACS_SCRIPT"
-ensure_component_cmd "Tinker" "analyze" "$INSTALL_TINKER_SCRIPT"
 ensure_component_cmd "Python 3" "python3" "$INSTALL_PYTHON3_SCRIPT"
 ensure_component_venv "Python 3 venv" "$INSTALL_PYTHON3_VENV"
 ensure_component_module "Python module pdbfixer" "pdbfixer" "$INSTALL_PDBFIXER_SCRIPT"
+ensure_component_cmd "GROMACS" "gmx" "$INSTALL_GROMACS_SCRIPT"
+ensure_component_cmd "Tinker" "analyze" "$INSTALL_TINKER_SCRIPT"
 ensure_component_cmd "wdrop" "wdrop" "$INSTALL_WDROP_SCRIPT"
 ensure_component_cmd "mobywat" "mobywat" "$INSTALL_MOBYWAT_SCRIPT"
 
