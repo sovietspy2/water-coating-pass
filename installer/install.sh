@@ -1,124 +1,177 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
 echo "WDROP INSTALLER"
 
-# functions
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+TARGET_USER="${SUDO_USER:-${USER:-root}}"
+TARGET_HOME="${HOME}"
+
+if [ -n "${SUDO_USER:-}" ] && command -v getent >/dev/null 2>&1; then
+    TARGET_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+fi
+
+HOME_BIN="${TARGET_HOME}/bin"
+BASHRC_FILE="${TARGET_HOME}/.bashrc"
+PATH_LINE='export PATH="$HOME/bin:$PATH"'
+
+missing_any=0
+installed_any=0
+
+ensure_root() {
+    if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+        return 0
+    fi
+
+    if command -v sudo >/dev/null 2>&1; then
+        echo "[INFO] Re-running with sudo..."
+        exec sudo -E bash "$0" "$@"
+    fi
+
+    echo "[ERROR] Root privileges are required, but sudo is not available."
+    echo "[ERROR] Run this script as root."
+    echo "[ERROR] In Docker, enter the container as root instead of relying on sudo."
+    exit 1
+}
+
+add_home_bin_to_path() {
+    mkdir -p "$HOME_BIN"
+
+    if [ ! -f "$BASHRC_FILE" ]; then
+        touch "$BASHRC_FILE"
+    fi
+
+    grep -qxF "$PATH_LINE" "$BASHRC_FILE" || printf '%s\n' "$PATH_LINE" >> "$BASHRC_FILE"
+
+    case ":$PATH:" in
+        *":$HOME_BIN:"*) ;;
+        *) export PATH="$HOME_BIN:$PATH" ;;
+    esac
+}
+
 run_installer() {
     local name="$1"
     local script_path="$2"
 
     echo "[INSTALL] $name is missing, running installer: $script_path"
 
-    if [ ! -x "$script_path" ]; then
-        echo "[ERROR] Installer script is not executable or does not exist: $script_path"
+    if [ ! -f "$script_path" ]; then
+        echo "[ERROR] Installer script does not exist: $script_path"
         exit 1
     fi
 
-    "$script_path"
+    bash "$script_path"
     installed_any=1
 }
 
-check_cmd() {
+has_cmd() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+has_python3() {
+    has_cmd python3
+}
+
+has_python_venv() {
+    has_python3 || return 1
+    python3 -m venv --help >/dev/null 2>&1
+}
+
+has_python_module() {
+    local module="$1"
+    has_python3 || return 1
+    python3 -c "import ${module}" >/dev/null 2>&1
+}
+
+ensure_component_cmd() {
+    local label="$1"
+    local cmd="$2"
+    local installer="$3"
+
+    if has_cmd "$cmd"; then
+        echo "[OK] $label found: $(command -v "$cmd")"
+    else
+        missing_any=1
+        run_installer "$label" "$installer"
+    fi
+}
+
+ensure_component_venv() {
+    local label="$1"
+    local installer="$2"
+
+    if has_python_venv; then
+        echo "[OK] $label found"
+    else
+        missing_any=1
+        run_installer "$label" "$installer"
+    fi
+}
+
+ensure_component_module() {
+    local label="$1"
+    local module="$2"
+    local installer="$3"
+
+    if has_python_module "$module"; then
+        echo "[OK] $label found"
+    else
+        missing_any=1
+        run_installer "$label" "$installer"
+    fi
+}
+
+collect_missing_cmd() {
     local label="$1"
     local cmd="$2"
 
-    if command -v "$cmd" >/dev/null 2>&1; then
-        echo "[OK] $label found: $(command -v "$cmd")"
-    else
-        echo "[MISSING] $label ($cmd) not found"
-        missing=1
+    if ! has_cmd "$cmd"; then
+        missing_items+=("$label")
     fi
 }
 
-check_python_module() {
-    local module="$1"
+collect_missing_venv() {
+    local label="$1"
 
-    if command -v python3 >/dev/null 2>&1; then
-        if python3 -c "import ${module}" >/dev/null 2>&1; then
-            echo "[OK] Python module found: $module"
-        else
-            echo "[MISSING] Python module not found: $module"
-            missing=1
-        fi
-    else
-        echo "[MISSING] python3 not found, so module check skipped: $module"
-        missing=1
+    if ! has_python_venv; then
+        missing_items+=("$label")
     fi
 }
 
-# Ading ~/bin to path
-mkdir -p "$HOME/bin"
-grep -qxF 'export PATH="$HOME/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.bashrc"
-export PATH="$HOME/bin:$PATH"
+collect_missing_module() {
+    local label="$1"
+    local module="$2"
 
+    if ! has_python3; then
+        missing_items+=("${label} (python3 unavailable)")
+    elif ! has_python_module "$module"; then
+        missing_items+=("$label")
+    fi
+}
 
-# Install script locations
-INSTALL_GROMACS_SCRIPT="./gromacs/install.sh"
-INSTALL_TINKER_SCRIPT="./tinker/install.sh"
-INSTALL_PYTHON3_SCRIPT="/python/python3.sh"
-INSTALL_PDBFIXER_SCRIPT="./python/pdb-fixer-install.sh"
-INSTALL_WDROP_SCRIPT="./wdrop/install.sh"
-INSTALL_MOBYWAT_SCRIPT="./mobywat/install.sh"
-INSTALL_PYTHON3_VENV="./python/venv.sh"
+INSTALL_GROMACS_SCRIPT="${SCRIPT_DIR}/gromacs/install.sh"
+INSTALL_TINKER_SCRIPT="${SCRIPT_DIR}/tinker/install.sh"
+INSTALL_PYTHON3_SCRIPT="${SCRIPT_DIR}/python/python3.sh"
+INSTALL_PDBFIXER_SCRIPT="${SCRIPT_DIR}/python/pdb-fixer-install.sh"
+INSTALL_WDROP_SCRIPT="${SCRIPT_DIR}/wdrop/install.sh"
+INSTALL_MOBYWAT_SCRIPT="${SCRIPT_DIR}/mobywat/install.sh"
+INSTALL_PYTHON3_VENV="${SCRIPT_DIR}/python/venv.sh"
 
-missing_any=0
-installed_any=0
+ensure_root "$@"
+add_home_bin_to_path
 
+echo
 echo "Checking required programs..."
 echo
 
-if ! command -v gmx >/dev/null 2>&1; then
-    missing_any=1
-    run_installer "GROMACS" "$INSTALL_GROMACS_SCRIPT"
-else
-    echo "[OK] GROMACS found"
-fi
-
-if ! command -v analyze >/dev/null 2>&1; then
-    missing_any=1
-    run_installer "Tinker" "$INSTALL_TINKER_SCRIPT"
-else
-    echo "[OK] Tinker found"
-fi
-
-if ! command -v python3 >/dev/null 2>&1; then
-    missing_any=1
-    run_installer "Python 3" "$INSTALL_PYTHON3_SCRIPT"
-else
-    echo "[OK] Python 3 found"
-fi
-
-if ! command -v python3 -m venv >/dev/null 2>&1; then
-    missing_any=1
-    run_installer "Python 3 venv" "$INSTALL_PYTHON3_SCRIPT"
-else
-    echo "[OK] Python 3 venv found"
-fi
-
-if command -v python3 >/dev/null 2>&1; then
-    if ! python3 -c "import pdbfixer" >/dev/null 2>&1; then
-        missing_any=1
-        run_installer "Python module pdbfixer" "$INSTALL_PDBFIXER_SCRIPT"
-    else
-        echo "[OK] Python module pdbfixer found"
-    fi
-else
-    echo "[WARN] Skipping pdbfixer check because python3 is not available yet"
-fi
-
-if ! command -v wdrop >/dev/null 2>&1; then
-    missing_any=1
-    run_installer "wdrop" "$INSTALL_WDROP_SCRIPT"
-else
-    echo "[OK] wdrop found"
-fi
-
-if ! command -v mobywat >/dev/null 2>&1; then
-    missing_any=1
-    run_installer "mobywat" "$INSTALL_MOBYWAT_SCRIPT"
-else
-    echo "[OK] mobywat found"
-fi
+ensure_component_cmd "GROMACS" "gmx" "$INSTALL_GROMACS_SCRIPT"
+ensure_component_cmd "Tinker" "analyze" "$INSTALL_TINKER_SCRIPT"
+ensure_component_cmd "Python 3" "python3" "$INSTALL_PYTHON3_SCRIPT"
+ensure_component_venv "Python 3 venv" "$INSTALL_PYTHON3_VENV"
+ensure_component_module "Python module pdbfixer" "pdbfixer" "$INSTALL_PDBFIXER_SCRIPT"
+ensure_component_cmd "wdrop" "wdrop" "$INSTALL_WDROP_SCRIPT"
+ensure_component_cmd "mobywat" "mobywat" "$INSTALL_MOBYWAT_SCRIPT"
 
 echo
 if [ "$missing_any" -eq 0 ]; then
@@ -133,38 +186,13 @@ echo
 
 missing_items=()
 
-if ! command -v gmx >/dev/null 2>&1; then
-    missing_items+=("GROMACS (gmx)")
-fi
-
-if ! command -v analyze >/dev/null 2>&1; then
-    missing_items+=("Tinker")
-fi
-
-if ! command -v python3 >/dev/null 2>&1; then
-    missing_items+=("Python 3")
-fi
-
-
-if ! command -v python3 -m venv >/dev/null 2>&1; then
-    missing_items+=("Python 3 venv")
-fi
-
-if command -v python3 >/dev/null 2>&1; then
-    if ! python3 -c "import pdbfixer" >/dev/null 2>&1; then
-        missing_items+=("Python module pdbfixer")
-    fi
-else
-    missing_items+=("Python module pdbfixer (python3 unavailable)")
-fi
-
-if ! command -v wdrop >/dev/null 2>&1; then
-    missing_items+=("wdrop")
-fi
-
-if ! command -v mobywat >/dev/null 2>&1; then
-    missing_items+=("mobywat")
-fi
+collect_missing_cmd "GROMACS (gmx)" "gmx"
+collect_missing_cmd "Tinker (analyze)" "analyze"
+collect_missing_cmd "Python 3" "python3"
+collect_missing_venv "Python 3 venv"
+collect_missing_module "Python module pdbfixer" "pdbfixer"
+collect_missing_cmd "wdrop" "wdrop"
+collect_missing_cmd "mobywat" "mobywat"
 
 if [ "${#missing_items[@]}" -eq 0 ]; then
     echo "All required programs/modules are installed."
