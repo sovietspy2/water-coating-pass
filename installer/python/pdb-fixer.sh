@@ -1,6 +1,15 @@
 #!/bin/bash
 set -e
 
+VENV_DIR="${SCRIPT_DIR}/../.venv"
+
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating virtual environment in $VENV_DIR..."
+    python3 -m venv "$VENV_DIR"
+fi
+
+source "$VENV_DIR/bin/activate"
+
 if ! command -v python3 >/dev/null 2>&1; then
     echo "python3 is required but not installed."
     exit 1
