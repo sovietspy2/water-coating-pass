@@ -4,7 +4,7 @@ set -Eeuo pipefail
 echo "WDROP INSTALLER"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-VENV_DIR="../.venv"
+VENV_DIR="${SCRIPT_DIR}/../.venv"
 
 TARGET_USER="${SUDO_USER:-${USER:-root}}"
 TARGET_HOME="${HOME}"
@@ -76,7 +76,9 @@ has_python3() {
 
 has_python_venv() {
     has_python3 || return 1
-    python3 -m venv --help >/dev/null 2>&1
+    python3 - <<'PY' >/dev/null 2>&1
+import venv
+PY
 }
 
 has_python_module() {
