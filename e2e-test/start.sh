@@ -7,7 +7,7 @@ CONTAINER_OUTPUT_DIR="/data/test_runs"
 
 mkdir -p "$HOST_OUTPUT_DIR"
 
-docker build -t "$IMAGE_NAME" .
+docker build --no-cache -t "$IMAGE_NAME" .
 
 docker run --rm -it \
 -v "${HOST_OUTPUT_DIR}:${CONTAINER_OUTPUT_DIR}" \
