@@ -279,18 +279,21 @@ log "${INPUT_DIR}/${MOBYWAT_INPUT_PDB} is ready to be processed by MobyWat!"
 
 log "Step 12: Running mobywat!"
 if [[ -n "${REFERENCE_PDB:-}" ]]; then
-
-  cp ${REFERENCE_PDB} system_ref.pdb
-
   log "REFERENCE_PDB is present and non-empty: $REFERENCE_PDB, VALIDATION MODE!"
-  run_step "${SCRIPT_DIR}"/apply_mobywat_params.sh system_ref.pdb
+
+  SYSTEM_REF_PDB="system_ref.pdb"
+  log "${REFERENCE_PDB} is copied to: ${SYSTEM_REF_PDB}, will edit it!"
+  cp ${REFERENCE_PDB} ${SYSTEM_REF_PDB} #creating local version, we will modify it
+
+  log "Adding mobywat params to ${SYSTEM_REF_PDB}"
+  run_step "${SCRIPT_DIR}"/apply_mobywat_params.sh ${SYSTEM_REF_PDB}
 
   log "Running mobywat validation"
-  run_step mobywat -f system_mdl.pdb -r system_ref.pdb -t [A] -w Auto -n 1-1000 -cls MER -m Analysis -v Diagnostic
+  run_step mobywat -f ${MOBYWAT_INPUT_PDB} -r ${SYSTEM_REF_PDB} -t [A] -w Auto -n 1-1000 -cls MER -m Analysis -v Diagnostic
 else
   log "REFERENCE_PDB is missing or empty, PREDICTION MODE!"
   log "Running mobywat prediction"
-  run_step mobywat -f "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}" -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
+  run_step mobywat -f ${MOBYWAT_INPUT_PDB} -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
 fi
 
 log "tinker.sh completed successfully"
