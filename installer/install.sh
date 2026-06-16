@@ -55,10 +55,11 @@ export PATH="$HOME/bin:$PATH"
 # Install script locations
 INSTALL_GROMACS_SCRIPT="./gromacs/install.sh"
 INSTALL_TINKER_SCRIPT="./tinker/install.sh"
-INSTALL_PYTHON3_SCRIPT="/python/install.sh"
+INSTALL_PYTHON3_SCRIPT="/python/python3.sh"
 INSTALL_PDBFIXER_SCRIPT="./python/pdb-fixer-install.sh"
 INSTALL_WDROP_SCRIPT="./wdrop/install.sh"
 INSTALL_MOBYWAT_SCRIPT="./mobywat/install.sh"
+INSTALL_PYTHON3_VENV="./python/venv.sh"
 
 missing_any=0
 installed_any=0
@@ -85,6 +86,13 @@ if ! command -v python3 >/dev/null 2>&1; then
     run_installer "Python 3" "$INSTALL_PYTHON3_SCRIPT"
 else
     echo "[OK] Python 3 found"
+fi
+
+if ! command -v python3 -m venv >/dev/null 2>&1; then
+    missing_any=1
+    run_installer "Python 3 venv" "$INSTALL_PYTHON3_SCRIPT"
+else
+    echo "[OK] Python 3 venv found"
 fi
 
 if command -v python3 >/dev/null 2>&1; then
@@ -137,6 +145,11 @@ if ! command -v python3 >/dev/null 2>&1; then
     missing_items+=("Python 3")
 fi
 
+
+if ! command -v python3 -m venv >/dev/null 2>&1; then
+    missing_items+=("Python 3 venv")
+fi
+
 if command -v python3 >/dev/null 2>&1; then
     if ! python3 -c "import pdbfixer" >/dev/null 2>&1; then
         missing_items+=("Python module pdbfixer")
@@ -150,7 +163,7 @@ if ! command -v wdrop >/dev/null 2>&1; then
 fi
 
 if ! command -v mobywat >/dev/null 2>&1; then
-    missing_items+=("wdrop")
+    missing_items+=("mobywat")
 fi
 
 if [ "${#missing_items[@]}" -eq 0 ]; then
