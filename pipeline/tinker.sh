@@ -287,6 +287,8 @@ if [[ -n "${REFERENCE_PDB:-}" ]]; then
 
   log "Adding mobywat params to ${SYSTEM_REF_PDB}"
   run_step "${SCRIPT_DIR}"/apply_mobywat_params.sh ${SYSTEM_REF_PDB}
+  log "Making sure Reference PDB is compatible with mobywat."
+  run_step "${SCRIPT_DIR}/reference-pdb-preprocessor.py" ${SYSTEM_REF_PDB}
 
   log "Running mobywat validation"
   run_step mobywat -f ${MOBYWAT_INPUT_PDB} -r ${SYSTEM_REF_PDB} -t [A] -w Auto -n 1-1000 -cls MER -m Analysis -v Diagnostic

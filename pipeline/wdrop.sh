@@ -13,7 +13,7 @@ echo "    \/  \/   |_____/|_|  \_\\____/|_|     "
 # Example validation mode: ./wdrop.sh /abs/path/ASD.pdb gromacs LONG /abs/path/ASD_crsyst.pdb
 
 # Python VENV setup
-VENV_DIR=".venv"
+VENV_DIR="../.venv"
 
 if [ ! -d "$VENV_DIR" ]; then
     echo "[INFO] Creating virtual environment..."
@@ -179,7 +179,7 @@ run_step "$SCRIPT_DIR"/model-reducer.sh "$INPUT_PDB"
 
 # This step is handling X-ray crystallography created PDB-s, adding residues if necessary, also it removes existing waters
 log "Step 0C: X-ray PDB fix, fixing missing atoms, removing existing waters! PYTHON DEPENDENCY!"
-run_step "$SCRIPT_DIR/pdb-atom-fixes.py" "$INPUT_PDB"
+run_step "$SCRIPT_DIR/target-pdb-preprocessor.py" "$INPUT_PDB"
 
 cd "$INPUT_DIR"
 log "Working directory: $INPUT_DIR"

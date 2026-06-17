@@ -2,8 +2,6 @@
 import os
 import sys
 import tempfile
-from pdbfixer import PDBFixer
-from openmm.app import PDBFile
 
 try:
     from pdbfixer import PDBFixer
