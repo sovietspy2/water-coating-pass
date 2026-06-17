@@ -30,4 +30,4 @@ $1=="TER" {
     next
 }
 {print}
-' ${PDB} > system_ref.pdb.tmp && mv system_ref.pdb.tmp ${PDB}.pdb
+' ${PDB} > system_ref.pdb.tmp && mv system_ref.pdb.tmp ${PDB}

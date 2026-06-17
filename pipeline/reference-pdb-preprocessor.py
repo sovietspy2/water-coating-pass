@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import tempfile
 
 try:
     from pdbfixer import PDBFixer
@@ -11,20 +12,14 @@ except ImportError:
 
 
 def main():
-    if len(sys.argv) not in (2, 3):
-        print("Usage: fix_pdb_keep_water.py input.pdb [output.pdb]", file=sys.stderr)
+    if len(sys.argv) != 2:
+        print("Usage: reference-pdb-preprocessor.py input.pdb", file=sys.stderr)
         sys.exit(1)
 
     input_pdb = os.path.abspath(sys.argv[1])
     if not os.path.isfile(input_pdb):
         print(f"Error: file not found: {input_pdb}", file=sys.stderr)
         sys.exit(1)
-
-    if len(sys.argv) == 3:
-        output_pdb = os.path.abspath(sys.argv[2])
-    else:
-        root, ext = os.path.splitext(input_pdb)
-        output_pdb = root + ".fixed.pdb"
 
     fixer = PDBFixer(filename=input_pdb)
 
@@ -48,14 +43,27 @@ def main():
     fixer.findMissingAtoms()
     fixer.addMissingAtoms()
 
-    # Write output; alternate locations are resolved by PDBFixer when loading/fixing
-    with open(output_pdb, "w") as handle:
-        PDBFile.writeFile(fixer.topology, fixer.positions, handle, keepIds=True)
+    # Write to a temp file in the same directory, then replace original atomically
+    input_dir = os.path.dirname(input_pdb)
+    input_name = os.path.basename(input_pdb)
 
-    print(f"[DONE] Wrote fixed PDB: {output_pdb}")
+    with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".tmp",
+            prefix=input_name + ".",
+            dir=input_dir,
+            delete=False,
+    ) as tmp:
+        temp_path = tmp.name
+        PDBFile.writeFile(fixer.topology, fixer.positions, tmp, keepIds=True)
+
+    os.replace(temp_path, input_pdb)
+
+    print(f"[DONE] Replaced original PDB with fixed version: {input_pdb}")
     print("[DONE] Waters kept.")
     print("[DONE] Missing internal residues repaired where possible.")
     print("[DONE] Alternate locations reduced to a single conformer.")
+
 
 if __name__ == "__main__":
     main()
