@@ -1,8 +1,6 @@
-source "$SCRIPT_DIR/pipeline_common.sh"
-
 PDB="${1:-system_ref.pdb}" #defaulting to mobywat convention
 
-log "Adding REMARK section to reference PDB file."
+echo "Adding REMARK section to reference PDB file."
 sed -i '1i\
 REMARK mobywat_reference_target [A]\
 REMARK mobywat_reference_waters Auto\
@@ -17,7 +15,7 @@ REMARK mobywat_reference_waters Auto\
 #REMARK mobywat_step_stol  0
 ' "${PDB}"
 
-log "Fixing TER with ID in the reference PDB file."
+echo "Fixing TER with ID in the reference PDB file."
 awk '
 BEGIN {n=1}
 $1=="ATOM" || $1=="HETATM" {
