@@ -14,18 +14,3 @@ REMARK mobywat_reference_waters Auto\
 #REMARK mobywat_num_stol   1\
 #REMARK mobywat_step_stol  0
 ' "${PDB}"
-
-echo "Fixing TER with ID in the reference PDB file."
-awk '
-BEGIN {n=1}
-$1=="ATOM" || $1=="HETATM" {
-    printf "%-6s%5d%s\n", substr($0,1,6), n, substr($0,12)
-    n++
-    next
-}
-$1=="TER" {
-    print "TER"
-    next
-}
-{print}
-' ${PDB} > system_ref.pdb.tmp && mv system_ref.pdb.tmp ${PDB}
