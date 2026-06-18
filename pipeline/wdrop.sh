@@ -12,18 +12,20 @@ echo "    \/  \/   |_____/|_|  \_\\____/|_|     "
 # Example prediciton mode: ./wdrop.sh /abs/path/ASD.pdb gromacs LONG
 # Example validation mode: ./wdrop.sh /abs/path/ASD.pdb gromacs LONG /abs/path/ASD_crsyst.pdb
 
-# Python VENV setup
-VENV_DIR="../.venv"
-
-if [ ! -d "$VENV_DIR" ]; then
-    echo "[INFO] Creating virtual environment..."
-    python3 -m venv "$VENV_DIR"
-fi
-
-source "$VENV_DIR/bin/activate"
-
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
+
+# Python VENV setup
+VENV_DIR="${SCRIPT_DIR}/../.venv"
+
+# Activating venv, if we dont have one it creates one
+[ -d "$VENV_DIR" ] || python3 -m venv "$VENV_DIR"
+[ -f "$VENV_DIR/bin/activate" ] || {
+    echo "[ERROR] Missing activate script: $VENV_DIR/bin/activate" >&2
+    exit 1
+}
+
+source "$VENV_DIR/bin/activate"
 
 SECONDS=0
 
@@ -149,8 +151,8 @@ case "$RUN_TYPE" in
     readonly ITERATIONS=1
     readonly WATERS_LAYERS_PER_RUN=5 # used to be 5
     readonly OUTPUT_TAG="5x1"
-    readonly FINAL_MD_DURATION="0.1" #in ns
-    readonly INTERMEDIATE_MD_DURATION="0.1" # in ns
+    readonly FINAL_MD_DURATION="0.001" #in ns
+    readonly INTERMEDIATE_MD_DURATION="0.001" # in ns
     ;;
   *)
     echo "Error: invalid RUN_TYPE '$RUN_TYPE' (expected LONG or SHORT)" >&2
