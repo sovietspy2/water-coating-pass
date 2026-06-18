@@ -7,8 +7,8 @@ INSTALL_PREFIX="/opt/tinker"
 PROFILE_FILE="$HOME/.tinker_env"
 
 echo "==> Installing dependencies"
-apt-get update
-apt-get install -y \
+sudo apt update
+sudo apt install -y \
   git \
   build-essential \
   gfortran \
@@ -45,10 +45,10 @@ cd "$SRC_DIR/source"
 make -j"$(nproc)"
 
 echo "==> Installing to $INSTALL_PREFIX"
-rm -rf "$INSTALL_PREFIX"
-mkdir -p "$INSTALL_PREFIX"
-cp -a "$SRC_DIR"/. "$INSTALL_PREFIX"/
-mkdir -p "$INSTALL_PREFIX/bin"
+sudo rm -rf "$INSTALL_PREFIX"
+sudo mkdir -p "$INSTALL_PREFIX"
+sudo cp -a "$SRC_DIR"/. "$INSTALL_PREFIX"/
+sudo mkdir -p "$INSTALL_PREFIX/bin"
 
 echo "==> Collecting executables"
 find "$INSTALL_PREFIX/source" -maxdepth 1 -type f -name "*.x" -exec bash -c '
@@ -62,7 +62,7 @@ find "$INSTALL_PREFIX/source" -maxdepth 1 -type f -name "*.x" -exec bash -c '
 echo "==> Symlinking executables into /usr/local/bin"
 for exe in "$INSTALL_PREFIX"/bin/*; do
   [ -f "$exe" ] || continue
-  ln -sf "$exe" "/usr/local/bin/$(basename "$exe")"
+  sudo ln -sf "$exe" "/usr/local/bin/$(basename "$exe")"
 done
 
 echo "==> Writing persistent environment file"

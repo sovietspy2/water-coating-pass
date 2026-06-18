@@ -10,8 +10,8 @@ URL="https://ftp.gromacs.org/gromacs/${TARBALL}"
 BIN_DIR="$HOME/bin"
 
 echo "==> Installing build dependencies"
-apt update
-apt install -y \
+sudo apt update
+sudo apt install -y \
     build-essential \
     cmake \
     git \

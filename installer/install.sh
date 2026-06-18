@@ -20,22 +20,6 @@ PATH_LINE='export PATH="$HOME/bin:$PATH"'
 missing_any=0
 installed_any=0
 
-ensure_root() {
-    if [ "${EUID:-$(id -u)}" -eq 0 ]; then
-        return 0
-    fi
-
-    if command -v sudo >/dev/null 2>&1; then
-        echo "[INFO] Re-running with sudo..."
-        exec sudo -E bash "$0" "$@"
-    fi
-
-    echo "[ERROR] Root privileges are required, but sudo is not available."
-    echo "[ERROR] Run this script as root."
-    echo "[ERROR] In Docker, enter the container as root instead of relying on sudo."
-    exit 1
-}
-
 add_home_bin_to_path() {
     mkdir -p "$HOME_BIN"
 
@@ -182,7 +166,6 @@ INSTALL_PDBFIXER_SCRIPT="${SCRIPT_DIR}/python/pdbfixer.sh"
 INSTALL_WDROP_SCRIPT="${SCRIPT_DIR}/wdrop/install.sh"
 INSTALL_MOBYWAT_SCRIPT="${SCRIPT_DIR}/mobywat/install.sh"
 
-ensure_root "$@"
 add_home_bin_to_path
 
 echo

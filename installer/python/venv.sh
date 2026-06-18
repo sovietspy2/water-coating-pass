@@ -15,8 +15,8 @@ fi
 # Ensure venv module is available; install it if missing
 if ! python3 -c "import venv" >/dev/null 2>&1; then
     echo "[INFO] python3-venv is missing. Installing..."
-    apt-get update -qq
-    apt-get install -y python3-venv
+    sudo apt update -qq
+    sudo apt install -y python3-venv
 fi
 
 if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then
