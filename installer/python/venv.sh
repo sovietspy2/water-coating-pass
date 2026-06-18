@@ -16,7 +16,11 @@ fi
 if ! python3 -c "import venv" >/dev/null 2>&1; then
     echo "[INFO] python3-venv is missing. Installing..."
     sudo apt update -qq
-    sudo apt install -y python3-venv
+
+    PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    echo "[INFO] Detected Python version: ${PYVER}"
+
+    sudo apt install -y "python${PYVER}-venv"
 fi
 
 if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then
