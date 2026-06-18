@@ -12,16 +12,15 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
-# Ensure venv module is available; install it if missing
-if ! python3 -c "import venv" >/dev/null 2>&1; then
-    echo "[INFO] python3-venv is missing. Installing..."
+PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+
+if ! python3 -m venv --without-pip /tmp/test-venv-check.$$ >/dev/null 2>&1; then
+    echo "[INFO] venv support looks broken. Installing matching package..."
     sudo apt update -qq
-
-    PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-    echo "[INFO] Detected Python version: ${PYVER}"
-
     sudo apt install -y "python${PYVER}-venv"
 fi
+
+rm -rf /tmp/test-venv-check.$$
 
 if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then
     echo "[OK] Virtual environment already exists at $VENV_DIR"
