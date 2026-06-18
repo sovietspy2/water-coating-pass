@@ -285,11 +285,11 @@ if [[ -n "${REFERENCE_PDB:-}" ]]; then
   log "${REFERENCE_PDB} is copied to: ${SYSTEM_REF_PDB}, will edit it!"
   cp ${REFERENCE_PDB} ${SYSTEM_REF_PDB} #creating local version, we will modify it
 
-  log "Adding mobywat params to ${SYSTEM_REF_PDB}"
-  run_step "${SCRIPT_DIR}"/add-mobywat-analysis-params.sh ${SYSTEM_REF_PDB}
-
   log "Making sure Reference PDB is compatible with mobywat."
   run_step "${SCRIPT_DIR}/reference-pdb-preprocessor.py" ${SYSTEM_REF_PDB}
+
+  log "Adding mobywat params to ${SYSTEM_REF_PDB}"
+  run_step "${SCRIPT_DIR}/add-mobywat-analysis-params.sh" ${SYSTEM_REF_PDB}
 
   log "Remove TER operator ID if present from ${SYSTEM_REF_PDB}"
   run_step "${SCRIPT_DIR}"/remove-ter-id.sh ${SYSTEM_REF_PDB}
