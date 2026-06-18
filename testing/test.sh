@@ -3,23 +3,27 @@ set -euo pipefail
 
 ################################################################################
 # WDROP Test Suite - Sequential Test Runner
-# 
+#
 # This script runs wdrop.sh multiple times sequentially with different modes and
 # configurations to stress-test the pipeline.
 #
 # Usage: ./test.sh [OPTIONS]
 #
 # Options:
-#   -u, --url URL           PDB URL to download (default: http://files.rcsb.org/download/1PSV.pdb)
-#   -n, --num-tests NUM     Number of test iterations to run (default: 10)
-#   -p, --path PATH         Base path for test directories (default: ./test_runs)
-#   -m, --mode MODE         Mode to test: tinker, gromacs, or all (default: all)
-#   -t, --type TYPE         Type to test: SHORT, LONG, or all (default: all)
-#   -l, --loop              Run each mode/type combination sequentially in an infinite loop until stopped
-#   -h, --help              Show this help message
+#   -u, --url URL              PDB URL to download
+#                              (default: http://files.rcsb.org/download/1PSV.pdb)
+#   -r, --reference-url URL    Optional reference PDB URL to download
+#   -n, --num-tests NUM        Number of test iterations to run (default: 10)
+#   -p, --path PATH            Base path for test directories (default: ./test_runs)
+#   -m, --mode MODE            Mode to test: tinker, gromacs, or all (default: all)
+#   -t, --type TYPE            Type to test: SHORT, LONG, or all (default: all)
+#   -l, --loop                 Run each mode/type combination sequentially in an
+#                              infinite loop until stopped
+#   -h, --help                 Show this help message
 #
-# Example:
+# Examples:
 #   ./test.sh -u http://files.rcsb.org/download/1PSV.pdb -n 5 -p /tmp/tests -m all -t all
+#   ./test.sh -u http://files.rcsb.org/download/1PSV.pdb -r http://files.rcsb.org/download/2PTC.pdb
 #   ./test.sh -l -m gromacs -t SHORT
 #
 ################################################################################
@@ -30,6 +34,7 @@ readonly SCRIPT="$PROJECT_ROOT/pipeline/wdrop.sh"
 
 # Default values
 PDB_URL="http://files.rcsb.org/download/1PSV.pdb"
+REFERENCE_PDB_URL=""
 NUM_TESTS=10
 TEST_BASE_PATH="./test_runs"
 TEST_MODES=("tinker" "gromacs")
@@ -54,19 +59,20 @@ print_usage() {
 Usage: $0 [OPTIONS]
 
 Options:
-  -u, --url URL           PDB URL to download
-                          (default: http://files.rcsb.org/download/1PSV.pdb)
-  -n, --num-tests NUM     Number of test iterations to run
-                          (default: 10)
-  -p, --path PATH         Base path for test directories
-                          (default: ./test_runs)
-  -m, --mode MODE         Mode to test: tinker, gromacs, or all
-                          (default: all)
-  -t, --type TYPE         Type to test: SHORT, LONG, or all
-                          (default: all)
-  -l, --loop              Run each mode/type combination sequentially in an
-                          infinite loop until stopped
-  -h, --help              Show this help message
+  -u, --url URL              PDB URL to download
+                             (default: http://files.rcsb.org/download/1PSV.pdb)
+  -r, --reference-url URL    Optional reference PDB URL to download
+  -n, --num-tests NUM        Number of test iterations to run
+                             (default: 10)
+  -p, --path PATH            Base path for test directories
+                             (default: ./test_runs)
+  -m, --mode MODE            Mode to test: tinker, gromacs, or all
+                             (default: all)
+  -t, --type TYPE            Type to test: SHORT, LONG, or all
+                             (default: all)
+  -l, --loop                 Run each mode/type combination sequentially in an
+                             infinite loop until stopped
+  -h, --help                 Show this help message
 
 Examples:
   # Default run with 10 tests
@@ -78,6 +84,10 @@ Examples:
   # Run SHORT tests only in /tmp/test_dir
   ./test.sh -p /tmp/test_dir -t SHORT
 
+  # Run with an optional reference PDB
+  ./test.sh -u http://files.rcsb.org/download/1PSV.pdb \
+            -r http://files.rcsb.org/download/2PTC.pdb
+
   # Run sequential tests forever until interrupted
   ./test.sh -l -m all -t all
 
@@ -87,6 +97,7 @@ Notes:
       - 2 tests × 2 modes (tinker, gromacs) = 4 total test runs
       - Tests run one after another
       - Each will create a separate folder with its own PDB download
+      - If --reference-url is set, the reference PDB is also downloaded per test
 
   Loop mode (-l):
       - Runs tests one after another
@@ -163,6 +174,10 @@ parse_arguments() {
     case "$1" in
       -u|--url)
         PDB_URL="$2"
+        shift 2
+        ;;
+      -r|--reference-url)
+        REFERENCE_PDB_URL="$2"
         shift 2
         ;;
       -n|--num-tests)
@@ -247,9 +262,19 @@ run_single_test_body() {
   local pdb_id
   pdb_id=$(extract_pdb_id "$PDB_URL")
 
+  local reference_pdb_id=""
+  if [[ -n "$REFERENCE_PDB_URL" ]]; then
+    reference_pdb_id=$(extract_pdb_id "$REFERENCE_PDB_URL")
+  fi
+
   local test_dir
   test_dir=$(create_test_directory "$test_num" "$mode" "$test_type")
   local pdb_file="${test_dir}/${pdb_id}.pdb"
+  local reference_pdb_file=""
+  if [[ -n "$REFERENCE_PDB_URL" ]]; then
+    reference_pdb_file="${test_dir}/${reference_pdb_id}.pdb"
+  fi
+
   local test_log="${test_dir}/test.log"
   local result_file="${test_dir}/result.txt"
 
@@ -257,16 +282,29 @@ run_single_test_body() {
 
   if ! download_pdb "$PDB_URL" "$pdb_file"; then
     log_msg ERROR "Test #${test_num}: Failed to download PDB"
-    echo "FAILED: Download error" > "$result_file"
+    echo "FAILED: Download error for input PDB" > "$result_file"
     return 1
   fi
 
-  log_msg INFO "Test #${test_num}: PDB downloaded, starting wdrop.sh"
+  if [[ -n "$REFERENCE_PDB_URL" ]]; then
+    if ! download_pdb "$REFERENCE_PDB_URL" "$reference_pdb_file"; then
+      log_msg ERROR "Test #${test_num}: Failed to download reference PDB"
+      echo "FAILED: Download error for reference PDB" > "$result_file"
+      return 1
+    fi
+  fi
+
+  log_msg INFO "Test #${test_num}: PDB(s) downloaded, starting wdrop.sh"
 
   local test_start
   test_start=$(date +%s)
 
-  if "$SCRIPT" "$pdb_file" "$mode" "$test_type" >> "$test_log" 2>&1; then
+  local cmd=("$SCRIPT" "$pdb_file" "$mode" "$test_type")
+  if [[ -n "$REFERENCE_PDB_URL" ]]; then
+    cmd+=("$reference_pdb_file")
+  fi
+
+  if "${cmd[@]}" >> "$test_log" 2>&1; then
     local test_end
     test_end=$(date +%s)
     local test_duration=$((test_end - test_start))
@@ -384,6 +422,7 @@ print_test_configuration() {
   log_msg INFO "======================================"
   log_msg INFO "Configuration:"
   log_msg INFO "  PDB URL: $PDB_URL"
+  log_msg INFO "  Reference PDB URL: ${REFERENCE_PDB_URL:-<none>}"
   log_msg INFO "  Number of iterations per mode/type: $NUM_TESTS"
   log_msg INFO "  Base path: $TEST_BASE_PATH"
   log_msg INFO "  Modes: ${TEST_MODES[*]}"
