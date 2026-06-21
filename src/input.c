@@ -1,4 +1,12 @@
-#include "../src/input.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <getopt.h>
+
+#include "input.h"
 
 ap *read_in_pdb (char *file_name, int *atom_num, int mdl_serno) {
 	
@@ -142,4 +150,138 @@ void str0 (char string [], int length) {
 	int i;
 	for (i = 0; i < length; i++)
 		string[i] = '\0';
-	} 
+	}
+
+
+static bool parse_double_arg(const char *text, const char *name, double min_value, double *out) {
+    char *end = NULL;
+    errno = 0;
+
+    double value = strtod(text, &end);
+
+    if (errno != 0 || end == text || *end != '\0') {
+        fprintf(stderr, "Error: '%s' not a valid real number: '%s'\n", name, text);
+        return false;
+    }
+
+    if (value <= min_value) {
+        fprintf(stderr, "Error: '%s' value must be greater than %.3f, given: %.3f\n",
+                name, min_value, value);
+        return false;
+    }
+
+    *out = value;
+    return true;
+}
+
+static bool parse_int_arg(const char *text, const char *name, int min_value, int *out) {
+    char *end = NULL;
+    errno = 0;
+
+    long value = strtol(text, &end, 10);
+
+    if (errno != 0 || end == text || *end != '\0') {
+        fprintf(stderr, "Error: '%s' not a valid integer: '%s'\n", name, text);
+        return false;
+    }
+
+    if (value > INT_MAX || value < INT_MIN) {
+        fprintf(stderr, "Error: '%s' out of integer bound: '%s'\n", name, text);
+        return false;
+    }
+
+    if ((int)value < min_value) {
+        fprintf(stderr, "Error: '%s' must be atlest %d, given: %d\n",
+                name, min_value, (int)value);
+        return false;
+    }
+
+    *out = (int)value;
+    return true;
+}
+
+void init_program_options(WdropProgramOptions *opt) {
+    opt->file[0] = '\0';
+    opt->sigma_p = 1.8;
+    opt->weed_dist = 3.5;
+    opt->n_layers = 1;
+}
+
+void print_program_usage(const char *progname) {
+    fprintf(stderr,
+        "Usage:\n"
+        "  %s --file <input.pdb> [--sigma <radius>] [--weed-dist <dist>] [--layers <n>]\n"
+        "  %s -f <input.pdb> [-s <radius>] [-w <dist>] [-n <n>]\n\n"
+        "Opciók:\n"
+        "  -f, --file         Input PDB file (mandatory)\n"
+        "  -s, --sigma        Probe radius, default: 1.8\n"
+        "  -w, --weed-dist    Minimal O-O distance, default: 3.5\n"
+        "  -n, --layers       Number of O layers, default: 1\n"
+        "  -h, --help         Getting help\n",
+        progname, progname
+    );
+}
+
+bool parse_program_args(int argc, char *argv[], WdropProgramOptions *opt) {
+    static struct option long_options[] = {
+        {"file",      required_argument, 0, 'f'},
+        {"sigma",     required_argument, 0, 's'},
+        {"weed-dist", required_argument, 0, 'w'},
+        {"layers",    required_argument, 0, 'n'},
+        {"help",      no_argument,       0, 'h'},
+        {0, 0, 0, 0}
+    };
+
+    int c;
+    init_program_options(opt);
+    opterr = 0;
+
+    while ((c = getopt_long(argc, argv, "f:s:w:n:h", long_options, NULL)) != -1) {
+        switch (c) {
+            case 'f':
+                if (strlen(optarg) >= MAX_FILENAME_LENGTH) {
+                    fprintf(stderr, "Error: The filename is too long.\n");
+                    return false;
+                }
+                snprintf(opt->file, sizeof(opt->file), "%s", optarg);
+                break;
+
+            case 's':
+                if (!parse_double_arg(optarg, "sigma", 0.0, &opt->sigma_p)) return false;
+                break;
+
+            case 'w':
+                if (!parse_double_arg(optarg, "weed-dist", 0.0, &opt->weed_dist)) return false;
+                break;
+
+            case 'n':
+                if (!parse_int_arg(optarg, "layers", 1, &opt->n_layers)) return false;
+                break;
+
+            case 'h':
+                print_program_usage(argv[0]);
+                exit(EXIT_SUCCESS);
+
+            case '?':
+            default:
+                fprintf(stderr, "Error: unknown parameter.\n");
+                return false;
+        }
+    }
+
+    if (optind < argc) {
+        fprintf(stderr, "Error: Unknown extra parameter(s):");
+        while (optind < argc) {
+            fprintf(stderr, " %s", argv[optind++]);
+        }
+        fprintf(stderr, "\n");
+        return false;
+    }
+
+    if (opt->file[0] == '\0') {
+        fprintf(stderr, "Error: Providing PDF file is mandatory with: --file .\n");
+        return false;
+    }
+
+    return true;
+}

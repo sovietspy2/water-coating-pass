@@ -90,7 +90,7 @@ run_wdrop_and_mm() {
   log "Expected wdrop output: $WDROP_OUTPUT"
   log "Expected mm output: $MM_OUT"
 
-  run_step wdrop "$INPUT_PDB_LOCAL" 1.8 3.5 "$WATERS"
+  run_step wdrop --file "${INPUT_PDB_LOCAL}" --sigma 1.8 --weed-dist 3.5 --layers "${WATERS}"
   require_file "$WDROP_OUTPUT" "wdrop output"
   log "wdrop output found: $WDROP_OUTPUT"
 
