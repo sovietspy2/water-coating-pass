@@ -27,8 +27,8 @@ int main(int argc, char *argv[]) {
 
     char file[200];
 
-    double sigma_p = 1.8; /* próbagömb sugara */
-    double weed_dist = 3.5; /* minimális távolság két új pont között */
+    double sigma_p = 1.8; // probe radius
+    double weed_dist = 3.5; // minimal distance between new Oxigens
     int n_layers = 1;
 
     if (argc >= 2) strcpy(file, argv[1]);
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
 
     g_pdb_ref = read_in_pdb(g_ref_name, &g_pdb_ref_no, -1);
     if (!g_pdb_ref || g_pdb_ref_no <= 0) {
-        fprintf(stderr, "Hiba: PDB beolvasas sikertelen vagy ures.\n");
+        fprintf(stderr, "Error: PDB reading was unsuccessful, or PDB file is empty.\n");
         return 1;
     }
 

@@ -4,59 +4,63 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
-#ifdef _OPENMP
-#endif
+#include <limits.h>
 
 #ifndef NEIGH_CAP
 #define NEIGH_CAP 96
 #endif
 
-static vec3 v3(double x, double y, double z) { vec3 r = {x,y,z}; return r; }
+static vec3 v3(double x, double y, double z) { vec3 r = {x, y, z}; return r; }
 
-static vec3 v3_add(vec3 a, vec3 b) { return v3(a.x+b.x, a.y+b.y, a.z+b.z); }
-static vec3 v3_sub(vec3 a, vec3 b) { return v3(a.x-b.x, a.y-b.y, a.z-b.z); }
-static vec3 v3_scale(vec3 a, double s) { return v3(a.x*s, a.y*s, a.z*s); }
+static vec3 v3_add(vec3 a, vec3 b) { return v3(a.x + b.x, a.y + b.y, a.z + b.z); }
+static vec3 v3_sub(vec3 a, vec3 b) { return v3(a.x - b.x, a.y - b.y, a.z - b.z); }
+static vec3 v3_scale(vec3 a, double s) { return v3(a.x * s, a.y * s, a.z * s); }
 
-static double v3_dot(vec3 a, vec3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+static double v3_dot(vec3 a, vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 
 static vec3 v3_cross(vec3 a, vec3 b) {
     return v3(
-        a.y*b.z - a.z*b.y,
-        a.z*b.x - a.x*b.z,
-        a.x*b.y - a.y*b.x
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
     );
 }
 
-static double v3_norm2(vec3 a) { return v3_dot(a,a); }
+static double v3_norm2(vec3 a) { return v3_dot(a, a); }
 static double v3_norm(vec3 a) { return sqrt(v3_norm2(a)); }
-
-static double v3_dist(vec3 a, vec3 b) { return v3_norm(v3_sub(a,b)); }
-static double v3_dist2(vec3 a, vec3 b) { return v3_norm2(v3_sub(a,b)); }
+static double v3_dist2(vec3 a, vec3 b) { return v3_norm2(v3_sub(a, b)); }
 
 static int v3_normalize(vec3 in, vec3 *out) {
     double n = v3_norm(in);
     if (n < EPS) return 0;
-    *out = v3_scale(in, 1.0/n);
+    *out = v3_scale(in, 1.0 / n);
     return 1;
 }
 
-static double sigma_from_atom(const ap *a) {
-    char e = '\0';
-    for (size_t t = 0; t < 4; t++) {
-        char c = a->pdb_type[t];
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) { e = c; break; }
+static char first_alpha_upper(const char *s, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c >= 'a' && c <= 'z') return (char)(c - 'a' + 'A');
+        if (c >= 'A' && c <= 'Z') return (char)c;
     }
-    if (e >= 'a' && e <= 'z') e = (char)(e - 32);
+    return '\0';
+}
 
-    /* PASS táblázat szerinti gyakori sugarak (Å), egyszerűsítve. */
+static double sigma_from_atom(const ap *a) {
+    char e;
+    if (!a) return 1.70;
+
+    e = first_alpha_upper(a->pdb_type, sizeof(a->pdb_type));
+    if (e == '\0') e = first_alpha_upper(a->mol2_type, sizeof(a->mol2_type));
+    if (e == '\0') e = first_alpha_upper(a->pdbqt_type, sizeof(a->pdbqt_type));
+
     switch (e) {
         case 'H': return 1.20;
         case 'O': return 1.52;
         case 'N': return 1.55;
         case 'C': return 1.70;
         case 'S': return 1.80;
-        default:  return 1.70; /* fallback */
+        default:  return 1.70;
     }
 }
 
@@ -64,13 +68,12 @@ static vec3 pos_from_atom(const ap *a) {
     return v3(a->x_coord, a->y_coord, a->z_coord);
 }
 
-/* --- Uniform grid (cell list) --- */
 typedef struct {
     vec3 min, max;
     double cell;
     int nx, ny, nz;
-    int *head; /* grid cell -> first index */
-    int *next; /* index -> next index in cell */
+    int *head;
+    int *next;
 
     const vec3 *pos;
     const double *sigma;
@@ -95,9 +98,17 @@ static void grid_free(grid3d *g) {
     free(g->next);
     g->head = NULL;
     g->next = NULL;
+    g->pos = NULL;
+    g->sigma = NULL;
+    g->n = 0;
+    g->nx = g->ny = g->nz = 0;
+    g->cell = 0.0;
+    g->max_sigma = 0.0;
 }
 
 static int grid_build(grid3d *g, const vec3 *pos, const double *sigma, size_t n, double sigma_p) {
+    size_t grid_sz;
+
     if (!g || !pos || !sigma || n == 0) return 0;
     memset(g, 0, sizeof(*g));
 
@@ -121,7 +132,7 @@ static int grid_build(grid3d *g, const vec3 *pos, const double *sigma, size_t n,
     g->max = mx;
     g->max_sigma = max_sigma;
 
-    g->cell = (max_sigma + sigma_p);
+    g->cell = max_sigma + sigma_p;
     if (g->cell < 1e-6) g->cell = 1.0;
 
     g->nx = (int)floor((g->max.x - g->min.x) / g->cell) + 1;
@@ -131,11 +142,15 @@ static int grid_build(grid3d *g, const vec3 *pos, const double *sigma, size_t n,
     if (g->ny < 1) g->ny = 1;
     if (g->nz < 1) g->nz = 1;
 
-    size_t grid_sz = (size_t)g->nx * (size_t)g->ny * (size_t)g->nz;
+    grid_sz = (size_t)g->nx * (size_t)g->ny * (size_t)g->nz;
+    if (grid_sz == 0 || grid_sz > ((size_t)INT_MAX * 16u)) return 0;
 
     g->head = (int*)malloc(grid_sz * sizeof(int));
     g->next = (int*)malloc(n * sizeof(int));
-    if (!g->head || !g->next) { grid_free(g); return 0; }
+    if (!g->head || !g->next) {
+        grid_free(g);
+        return 0;
+    }
 
     for (size_t i = 0; i < grid_sz; i++) g->head[i] = -1;
 
@@ -159,7 +174,6 @@ static int grid_build(grid3d *g, const vec3 *pos, const double *sigma, size_t n,
 static int pair_bridgeable(vec3 A, double sigma_A, vec3 B, double sigma_B, double sigma_p) {
     double RA = sigma_A + sigma_p;
     double RB = sigma_B + sigma_p;
-
     double d2 = v3_dist2(A, B);
     double sum = RA + RB;
     double diff = fabs(RA - RB);
@@ -178,6 +192,7 @@ static void neigh_try_add(
     double cand_d2
 ) {
     int nnb = *nnb_io;
+
     if (nnb < cap) {
         neigh[nnb] = cand;
         neigh_d2[nnb] = cand_d2;
@@ -185,7 +200,6 @@ static void neigh_try_add(
         return;
     }
 
-    /* keressük a legrosszabbat (legtávolabbit) a tartott listában */
     int worst_i = 0;
     double worst_d2 = neigh_d2[0];
     for (int i = 1; i < cap; i++) {
@@ -201,32 +215,6 @@ static void neigh_try_add(
     }
 }
 
-typedef struct {
-    vec3 *data;
-    size_t n;
-    size_t cap;
-} vec3_list;
-
-static void v3list_free(vec3_list *l) {
-    if (!l) return;
-    free(l->data);
-    l->data = NULL;
-    l->n = l->cap = 0;
-}
-
-static int v3list_push(vec3_list *l, vec3 p) {
-    if (l->n == l->cap) {
-        size_t new_cap = (l->cap == 0) ? 1024 : l->cap * 2;
-        vec3 *tmp = (vec3*)realloc(l->data, new_cap * sizeof(vec3));
-        if (!tmp) return 0;
-        l->data = tmp;
-        l->cap = new_cap;
-    }
-    l->data[l->n++] = p;
-    return 1;
-}
-
-/* Ütközés grid-del: csak közeli cellák */
 static int clashes_with_any_grid(vec3 p, const grid3d *g, double sigma_p) {
     if (!g || !g->head || !g->next) return 0;
 
@@ -238,21 +226,27 @@ static int clashes_with_any_grid(vec3 p, const grid3d *g, double sigma_p) {
     iz = clampi(iz, 0, g->nz - 1);
 
     for (int dz = -1; dz <= 1; dz++) {
-        int zz = iz + dz; if (zz < 0 || zz >= g->nz) continue;
+        int zz = iz + dz;
+        if (zz < 0 || zz >= g->nz) continue;
+
         for (int dy = -1; dy <= 1; dy++) {
-            int yy = iy + dy; if (yy < 0 || yy >= g->ny) continue;
+            int yy = iy + dy;
+            if (yy < 0 || yy >= g->ny) continue;
+
             for (int dx = -1; dx <= 1; dx++) {
-                int xx = ix + dx; if (xx < 0 || xx >= g->nx) continue;
+                int xx = ix + dx;
+                if (xx < 0 || xx >= g->nx) continue;
 
                 int gi = grid_index(g, xx, yy, zz);
                 for (int ai = g->head[gi]; ai != -1; ai = g->next[ai]) {
                     double min_d = g->sigma[ai] + sigma_p;
-                    double lim = (min_d - CLASH_TOL);
+                    double lim = min_d - CLASH_TOL;
                     if (v3_dist2(p, g->pos[ai]) < (lim * lim)) return 1;
                 }
             }
         }
     }
+
     return 0;
 }
 
@@ -274,13 +268,19 @@ static void grid_pts_free(grid_pts *gp) {
     free(gp->pts);
     gp->head = NULL;
     gp->next = NULL;
-    gp->pts  = NULL;
-    gp->n = gp->cap = 0;
+    gp->pts = NULL;
+    gp->n = 0;
+    gp->cap = 0;
+    gp->nx = gp->ny = gp->nz = 0;
+    gp->cell = 0.0;
 }
 
 static int grid_pts_init(grid_pts *gp, vec3 mn, vec3 mx, double cell, size_t cap_pts) {
+    size_t grid_sz;
+
     if (!gp) return 0;
     memset(gp, 0, sizeof(*gp));
+
     gp->min = mn;
     gp->cell = (cell < 1e-6) ? 1.0 : cell;
 
@@ -291,11 +291,18 @@ static int grid_pts_init(grid_pts *gp, vec3 mn, vec3 mx, double cell, size_t cap
     if (gp->ny < 1) gp->ny = 1;
     if (gp->nz < 1) gp->nz = 1;
 
-    size_t grid_sz = (size_t)gp->nx * (size_t)gp->ny * (size_t)gp->nz;
+    grid_sz = (size_t)gp->nx * (size_t)gp->ny * (size_t)gp->nz;
+    if (grid_sz == 0) return 0;
+
+    if (cap_pts == 0) cap_pts = 1024;
+
     gp->head = (int*)malloc(grid_sz * sizeof(int));
     gp->next = (int*)malloc(cap_pts * sizeof(int));
-    gp->pts  = (vec3*)malloc(cap_pts * sizeof(vec3));
-    if (!gp->head || !gp->next || !gp->pts) { grid_pts_free(gp); return 0; }
+    gp->pts = (vec3*)malloc(cap_pts * sizeof(vec3));
+    if (!gp->head || !gp->next || !gp->pts) {
+        grid_pts_free(gp);
+        return 0;
+    }
 
     for (size_t i = 0; i < grid_sz; i++) gp->head[i] = -1;
     gp->n = 0;
@@ -312,16 +319,16 @@ static int grid_pts_ensure_capacity(grid_pts *gp) {
 
     size_t new_cap = (gp->cap == 0) ? 1024 : gp->cap * 2;
     int *new_next = (int*)realloc(gp->next, new_cap * sizeof(int));
-    vec3 *new_pts = (vec3*)realloc(gp->pts,  new_cap * sizeof(vec3));
+    vec3 *new_pts = (vec3*)realloc(gp->pts, new_cap * sizeof(vec3));
     if (!new_next || !new_pts) {
-        /* ha egyik realloc fail, a másik lehet már sikerült; kezeljük óvatosan */
         if (new_next) gp->next = new_next;
-        if (new_pts)  gp->pts  = new_pts;
+        if (new_pts) gp->pts = new_pts;
         return 0;
     }
+
     gp->next = new_next;
-    gp->pts  = new_pts;
-    gp->cap  = new_cap;
+    gp->pts = new_pts;
+    gp->cap = new_cap;
     return 1;
 }
 
@@ -336,11 +343,16 @@ static int too_close_to_new_grid(vec3 p, const grid_pts *gp, double weed_dist) {
     iz = clampi(iz, 0, gp->nz - 1);
 
     for (int dz = -1; dz <= 1; dz++) {
-        int zz = iz + dz; if (zz < 0 || zz >= gp->nz) continue;
+        int zz = iz + dz;
+        if (zz < 0 || zz >= gp->nz) continue;
+
         for (int dy = -1; dy <= 1; dy++) {
-            int yy = iy + dy; if (yy < 0 || yy >= gp->ny) continue;
+            int yy = iy + dy;
+            if (yy < 0 || yy >= gp->ny) continue;
+
             for (int dx = -1; dx <= 1; dx++) {
-                int xx = ix + dx; if (xx < 0 || xx >= gp->nx) continue;
+                int xx = ix + dx;
+                if (xx < 0 || xx >= gp->nx) continue;
 
                 int gi = grid_pts_index(gp, xx, yy, zz);
                 for (int pi = gp->head[gi]; pi != -1; pi = gp->next[pi]) {
@@ -349,6 +361,7 @@ static int too_close_to_new_grid(vec3 p, const grid_pts *gp, double weed_dist) {
             }
         }
     }
+
     return 0;
 }
 
@@ -372,7 +385,6 @@ static int grid_pts_add(grid_pts *gp, vec3 p) {
     return 1;
 }
 
-/* Új h2o oxigén atom kitöltése. */
 static void make_hoh_oxygen(
     ap *out,
     int model_ser,
@@ -387,15 +399,11 @@ static void make_hoh_oxygen(
     strncpy(out->pdb_token, "HETATM", sizeof(out->pdb_token) - 1);
     out->atom_ser = atom_ser;
     strncpy(out->pdb_type, "O", sizeof(out->pdb_type) - 1);
-    strncpy(out->pdb_alt_loc, "", sizeof(out->pdb_alt_loc) - 1);
     strncpy(out->res_type, "WAT", sizeof(out->res_type) - 1);
 
     out->chain[0] = chain_id;
     out->chain[1] = '\0';
-
     out->res_ser = res_ser;
-
-    strncpy(out->pdb_achar, "", sizeof(out->pdb_achar) - 1);
 
     out->x_coord = p.x;
     out->y_coord = p.y;
@@ -403,13 +411,9 @@ static void make_hoh_oxygen(
 
     out->occ = 1.0;
     out->b_factor = 0.0;
-
-    strncpy(out->mol2_type, "", sizeof(out->mol2_type) - 1);
     out->mol2_charge = 0.0;
-    strncpy(out->pdbqt_type, "", sizeof(out->pdbqt_type) - 1);
 }
 
-// PASS algo
 int three_point_sphere_geometry(
     vec3 i, double sigma_i,
     vec3 j, double sigma_j,
@@ -421,7 +425,6 @@ int three_point_sphere_geometry(
     double *V_out,
     double *h_out
 ) {
-
     double R_i = sigma_i + sigma_p;
     double R_j = sigma_j + sigma_p;
     double R_k = sigma_k + sigma_p;
@@ -431,10 +434,9 @@ int three_point_sphere_geometry(
     if (d_ij < EPS) return 0;
 
     vec3 ex;
-    if (!v3_normalize(ij, &ex)) return 0; /* x' egységvektor */
+    if (!v3_normalize(ij, &ex)) return 0;
 
     vec3 ik = v3_sub(k, i);
-
     double x_k = v3_dot(ik, ex);
 
     vec3 ik_perp = v3_sub(ik, v3_scale(ex, x_k));
@@ -446,12 +448,11 @@ int three_point_sphere_geometry(
 
     vec3 ez = v3_cross(ex, ey);
 
-    double U = (d_ij*d_ij + R_i*R_i - R_j*R_j) / (2.0*d_ij);
-
+    double U = (d_ij * d_ij + R_i * R_i - R_j * R_j) / (2.0 * d_ij);
     double d_ik2 = v3_norm2(ik);
-    double V = (d_ik2 + R_i*R_i - R_k*R_k - 2.0*x_k*U) / (2.0*y_k);
+    double V = (d_ik2 + R_i * R_i - R_k * R_k - 2.0 * x_k * U) / (2.0 * y_k);
 
-    double h2 = R_i*R_i - U*U - V*V;
+    double h2 = R_i * R_i - U * U - V * V;
     if (h2 < -1e-8) return 0;
     if (h2 < 0.0) h2 = 0.0;
     double h = sqrt(h2);
@@ -481,20 +482,30 @@ int pass_like_coating(
     char chain_id
 ) {
     if (!atoms_io || !n_atoms_io || !cap_io || !next_atom_ser || !next_res_ser) return 0;
-    if (n_layers <= 0) return 0;
+    if (n_layers <= 0 || weed_dist <= 0.0) return 0;
 
     ap *atoms = *atoms_io;
     int n_atoms = *n_atoms_io;
     int cap = *cap_io;
-
     int total_added = 0;
 
     for (int layer = 0; layer < n_layers; layer++) {
         size_t n_substrate = (size_t)n_atoms;
+        vec3 *pos = NULL;
+        double *sig = NULL;
+        int *neigh = NULL;
+        double *neigh_d2 = NULL;
+        int layer_ok = 1;
 
-        vec3 *pos = (vec3*)malloc(n_substrate * sizeof(vec3));
-        double *sig = (double*)malloc(n_substrate * sizeof(double));
-        if (!pos || !sig) { free(pos); free(sig); break; }
+        if (n_substrate < 3) break;
+
+        pos = (vec3*)malloc(n_substrate * sizeof(vec3));
+        sig = (double*)malloc(n_substrate * sizeof(double));
+        if (!pos || !sig) {
+            free(pos);
+            free(sig);
+            break;
+        }
 
         for (size_t i = 0; i < n_substrate; i++) {
             pos[i] = pos_from_atom(&atoms[i]);
@@ -503,168 +514,150 @@ int pass_like_coating(
 
         grid3d g;
         if (!grid_build(&g, pos, sig, n_substrate, sigma_p)) {
-            fprintf(stderr, "ERROR: grid_build failed\n");
-            free(pos); free(sig);
+            free(pos);
+            free(sig);
             break;
         }
+
+        double pad = g.max_sigma + sigma_p + weed_dist;
+        vec3 ng_min = v3(g.min.x - pad, g.min.y - pad, g.min.z - pad);
+        vec3 ng_max = v3(g.max.x + pad, g.max.y + pad, g.max.z + pad);
 
         grid_pts ng;
-        if (!grid_pts_init(&ng, g.min, g.max, weed_dist, 1024)) {
+        if (!grid_pts_init(&ng, ng_min, ng_max, weed_dist, 1024)) {
             grid_free(&g);
-            free(pos); free(sig);
+            free(pos);
+            free(sig);
             break;
         }
 
-        vec3_list all_candidates = {0};
-
-
-
-        {
-            vec3_list local = {0};
-
-            grid_pts local_ng;
-            int local_ng_ok = grid_pts_init(&local_ng, g.min, g.max, weed_dist, 1024);
-
-            int *neigh = (int*)malloc((size_t)NEIGH_CAP * sizeof(int));
-            double *neigh_d2 = (double*)malloc((size_t)NEIGH_CAP * sizeof(double));
-
-
-            for (size_t a = 0; a + 2 < n_substrate; a++) {
-                vec3 i = pos[a];
-                double sigma_i = sig[a];
-
-                /* cell-radius dinamikusan, de csak ahhoz, hogy a grid cellákat bejárjuk */
-                double cutoff_max = (sigma_i + sigma_p) + (g.max_sigma + sigma_p);
-                int r = (int)ceil(cutoff_max / g.cell);
-                if (r < 1) r = 1;
-
-                int ix = (int)floor((i.x - g.min.x) / g.cell);
-                int iy = (int)floor((i.y - g.min.y) / g.cell);
-                int iz = (int)floor((i.z - g.min.z) / g.cell);
-                ix = clampi(ix, 0, g.nx - 1);
-                iy = clampi(iy, 0, g.ny - 1);
-                iz = clampi(iz, 0, g.nz - 1);
-
-                int nnb = 0;
-
-                for (int dz = -r; dz <= r; dz++) {
-                    int zz = iz + dz; if (zz < 0 || zz >= g.nz) continue;
-                    for (int dy = -r; dy <= r; dy++) {
-                        int yy = iy + dy; if (yy < 0 || yy >= g.ny) continue;
-                        for (int dx = -r; dx <= r; dx++) {
-                            int xx = ix + dx; if (xx < 0 || xx >= g.nx) continue;
-
-                            int gi = grid_index(&g, xx, yy, zz);
-                            for (int bi = g.head[gi]; bi != -1; bi = g.next[bi]) {
-                                if ((size_t)bi <= a) continue;
-
-                                vec3 jpos = pos[(size_t)bi];
-                                double sigma_j = sig[(size_t)bi];
-
-                                double d2 = v3_dist2(i, jpos);
-                                double RA = sigma_i + sigma_p;
-                                double RB = sigma_j + sigma_p;
-                                double sum = RA + RB;
-                                double diff = fabs(RA - RB);
-                                if (d2 > (sum * sum)) continue;
-                                if (d2 < (diff * diff)) continue;
-
-                                if (neigh && neigh_d2) {
-                                    neigh_try_add(neigh, neigh_d2, &nnb, NEIGH_CAP, bi, d2);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                for (int nb1 = 0; nb1 + 1 < nnb; nb1++) {
-                    size_t b = (size_t)neigh[nb1];
-                    vec3 j = pos[b];
-                    double sigma_j = sig[b];
-
-                    if (!pair_bridgeable(i, sigma_i, j, sigma_j, sigma_p)) continue;
-
-                    for (int nb2 = nb1 + 1; nb2 < nnb; nb2++) {
-                        size_t c = (size_t)neigh[nb2];
-                        vec3 k = pos[c];
-                        double sigma_k = sig[c];
-
-                        if (!pair_bridgeable(i, sigma_i, k, sigma_k, sigma_p)) continue;
-                        if (!pair_bridgeable(j, sigma_j, k, sigma_k, sigma_p)) continue;
-
-                        vec3 p_plus, p_minus;
-                        double U, V, h;
-                        int nsol = three_point_sphere_geometry(
-                            i, sigma_i,
-                            j, sigma_j,
-                            k, sigma_k,
-                            sigma_p,
-                            &p_plus, &p_minus,
-                            &U, &V, &h
-                        );
-                        if (nsol == 0) continue;
-
-                        for (int s = 0; s < nsol; s++) {
-                            vec3 p = (s == 0) ? p_plus : p_minus;
-
-                            if (clashes_with_any_grid(p, &g, sigma_p)) continue;
-
-                            if (local_ng_ok) {
-                                if (too_close_to_new_grid(p, &local_ng, weed_dist)) continue;
-                                (void)grid_pts_add(&local_ng, p);
-                                (void)v3list_push(&local, p);
-                            } else {
-                                (void)v3list_push(&local, p);
-                            }
-                        }
-                    }
-                }
-            }
-
+        neigh = (int*)malloc((size_t)NEIGH_CAP * sizeof(int));
+        neigh_d2 = (double*)malloc((size_t)NEIGH_CAP * sizeof(double));
+        if (!neigh || !neigh_d2) {
             free(neigh);
             free(neigh_d2);
-            grid_pts_free(&local_ng);
+            grid_pts_free(&ng);
+            grid_free(&g);
+            free(pos);
+            free(sig);
+            break;
+        }
 
+        for (size_t a = 0; a + 2 < n_substrate && layer_ok; a++) {
+            vec3 i = pos[a];
+            double sigma_i = sig[a];
+            double cutoff_max = (sigma_i + sigma_p) + (g.max_sigma + sigma_p);
+            int r = (int)ceil(cutoff_max / g.cell);
+            int nnb = 0;
 
-            {
-                for (size_t i = 0; i < local.n; i++) {
-                    (void)v3list_push(&all_candidates, local.data[i]);
+            if (r < 1) r = 1;
+
+            int ix = (int)floor((i.x - g.min.x) / g.cell);
+            int iy = (int)floor((i.y - g.min.y) / g.cell);
+            int iz = (int)floor((i.z - g.min.z) / g.cell);
+            ix = clampi(ix, 0, g.nx - 1);
+            iy = clampi(iy, 0, g.ny - 1);
+            iz = clampi(iz, 0, g.nz - 1);
+
+            for (int dz = -r; dz <= r; dz++) {
+                int zz = iz + dz;
+                if (zz < 0 || zz >= g.nz) continue;
+
+                for (int dy = -r; dy <= r; dy++) {
+                    int yy = iy + dy;
+                    if (yy < 0 || yy >= g.ny) continue;
+
+                    for (int dx = -r; dx <= r; dx++) {
+                        int xx = ix + dx;
+                        if (xx < 0 || xx >= g.nx) continue;
+
+                        int gi = grid_index(&g, xx, yy, zz);
+                        for (int bi = g.head[gi]; bi != -1; bi = g.next[bi]) {
+                            if ((size_t)bi <= a) continue;
+
+                            vec3 jpos = pos[(size_t)bi];
+                            double sigma_j = sig[(size_t)bi];
+                            double d2 = v3_dist2(i, jpos);
+                            double RA = sigma_i + sigma_p;
+                            double RB = sigma_j + sigma_p;
+                            double sum = RA + RB;
+                            double diff = fabs(RA - RB);
+
+                            if (d2 > (sum * sum)) continue;
+                            if (d2 < (diff * diff)) continue;
+
+                            neigh_try_add(neigh, neigh_d2, &nnb, NEIGH_CAP, bi, d2);
+                        }
+                    }
                 }
             }
 
-            v3list_free(&local);
-        }
+            for (int nb1 = 0; nb1 + 1 < nnb && layer_ok; nb1++) {
+                size_t b = (size_t)neigh[nb1];
+                vec3 j = pos[b];
+                double sigma_j = sig[b];
 
-        for (size_t t = 0; t < all_candidates.n; t++) {
-            vec3 p = all_candidates.data[t];
+                if (!pair_bridgeable(i, sigma_i, j, sigma_j, sigma_p)) continue;
 
-            if (too_close_to_new_grid(p, &ng, weed_dist)) continue;
-            if (!grid_pts_add(&ng, p)) break;
-        }
+                for (int nb2 = nb1 + 1; nb2 < nnb; nb2++) {
+                    size_t c = (size_t)neigh[nb2];
+                    vec3 k = pos[c];
+                    double sigma_k = sig[c];
 
-        for (size_t t = 0; t < ng.n; t++) {
-            if (n_atoms == cap) {
-                size_t new_cap_atoms = (cap == 0) ? 1024 : (size_t)cap * 2;
-                ap *tmp = (ap*)realloc(atoms, new_cap_atoms * sizeof(ap));
-                if (!tmp) break;
-                atoms = tmp;
-                cap = (int)new_cap_atoms;
+                    if (!pair_bridgeable(i, sigma_i, k, sigma_k, sigma_p)) continue;
+                    if (!pair_bridgeable(j, sigma_j, k, sigma_k, sigma_p)) continue;
+
+                    vec3 p_plus, p_minus;
+                    int nsol = three_point_sphere_geometry(
+                        i, sigma_i,
+                        j, sigma_j,
+                        k, sigma_k,
+                        sigma_p,
+                        &p_plus, &p_minus,
+                        NULL, NULL, NULL
+                    );
+                    if (nsol == 0) continue;
+
+                    for (int s = 0; s < nsol; s++) {
+                        vec3 p = (s == 0) ? p_plus : p_minus;
+                        if (clashes_with_any_grid(p, &g, sigma_p)) continue;
+                        if (too_close_to_new_grid(p, &ng, weed_dist)) continue;
+                        if (!grid_pts_add(&ng, p)) {
+                            layer_ok = 0;
+                            break;
+                        }
+                    }
+                }
             }
-
-            make_hoh_oxygen(
-                &atoms[n_atoms],
-                model_ser,
-                (*next_atom_ser)++,
-                (*next_res_ser)++,
-                chain_id,
-                ng.pts[t]
-            );
-
-            n_atoms++;
-            total_added++;
         }
 
-        v3list_free(&all_candidates);
+        if (layer_ok) {
+            for (size_t t = 0; t < ng.n; t++) {
+                if (n_atoms == cap) {
+                    size_t new_cap_atoms = (cap <= 0) ? 1024u : (size_t)cap * 2u;
+                    if (new_cap_atoms > (size_t)INT_MAX) break;
+
+                    ap *tmp = (ap*)realloc(atoms, new_cap_atoms * sizeof(ap));
+                    if (!tmp) break;
+                    atoms = tmp;
+                    cap = (int)new_cap_atoms;
+                }
+
+                make_hoh_oxygen(
+                    &atoms[n_atoms],
+                    model_ser,
+                    (*next_atom_ser)++,
+                    (*next_res_ser)++,
+                    chain_id,
+                    ng.pts[t]
+                );
+                n_atoms++;
+                total_added++;
+            }
+        }
+
+        free(neigh);
+        free(neigh_d2);
         grid_pts_free(&ng);
         grid_free(&g);
         free(pos);
@@ -674,15 +667,14 @@ int pass_like_coating(
     *atoms_io = atoms;
     *n_atoms_io = n_atoms;
     *cap_io = cap;
-
     return total_added;
 }
 
-// PDB pdb etc
 static int ends_with_pdb_ci(const char *s) {
     size_t n = strlen(s);
     if (n < 4) return 0;
-    char a = s[n-4], b = s[n-3], c = s[n-2], d = s[n-1];
+
+    char a = s[n - 4], b = s[n - 3], c = s[n - 2], d = s[n - 1];
     if (a != '.') return 0;
     if (b >= 'a' && b <= 'z') b = (char)(b - 'a' + 'A');
     if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
@@ -691,35 +683,33 @@ static int ends_with_pdb_ci(const char *s) {
 }
 
 char *pdb_to_edited(const char *in, int layer) {
-    if (!in) return NULL;
-    const char *suffix;
-    if (layer == 1) {
-        suffix = "_1WAT.pdb";
-    } else {
+    char suffix_buf[64];
+    size_t in_len, base_len, out_len;
+    char *out;
 
-        const char *base = "WAT.pdb";
-        char out[256];
-        snprintf(out, sizeof out, "_%d%s", layer, base);
-        suffix = out;
+    if (!in) return NULL;
+
+    if (layer <= 1) {
+        snprintf(suffix_buf, sizeof(suffix_buf), "_1WAT.pdb");
+    } else {
+        snprintf(suffix_buf, sizeof(suffix_buf), "_%dWAT.pdb", layer);
     }
 
-    size_t in_len = strlen(in);
-
+    in_len = strlen(in);
     if (!ends_with_pdb_ci(in)) {
-        char *out = (char*)malloc(in_len + 1);
+        out = (char*)malloc(in_len + 1);
         if (!out) return NULL;
         memcpy(out, in, in_len + 1);
         return out;
     }
 
-    size_t base_len = in_len - 4;
-    size_t out_len = base_len + strlen(suffix);
-
-    char *out = (char*)malloc(out_len + 1);
+    base_len = in_len - 4;
+    out_len = base_len + strlen(suffix_buf);
+    out = (char*)malloc(out_len + 1);
     if (!out) return NULL;
 
     memcpy(out, in, base_len);
-    memcpy(out + base_len, suffix, strlen(suffix) + 1); // includes '\0'
+    memcpy(out + base_len, suffix_buf, strlen(suffix_buf) + 1);
     return out;
 }
 
@@ -729,7 +719,6 @@ void find_next_serials(const ap *atoms, int n_atoms, int *next_atom_ser, int *ne
 
     if (!next_atom_ser || !next_res_ser) return;
 
-    /* Üres lista esetén kezdjük 1-ről */
     if (!atoms || n_atoms <= 0) {
         *next_atom_ser = 1;
         *next_res_ser = 1;
@@ -744,4 +733,3 @@ void find_next_serials(const ap *atoms, int n_atoms, int *next_atom_ser, int *ne
     *next_atom_ser = max_atom_ser + 1;
     *next_res_ser = max_res_ser + 1;
 }
-
