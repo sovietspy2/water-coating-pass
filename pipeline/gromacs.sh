@@ -2,27 +2,27 @@
 set -euo pipefail
 
 ns_to_nsteps() {
-  local ns="${1:?usage: ns_to_nsteps <ns>}"
-  local dt_ps="${2:-0.002}"
+  local NS="${1:?usage: ns_to_nsteps <ns>}"
+  local DT_PS="${2:-0.002}"
 
-  awk -v ns="$ns" -v dt="$dt_ps" 'BEGIN {
+  awk -v ns="$NS" -v dt="$DT_PS" 'BEGIN {
     printf "%.0f", (ns * 1000) / dt
   }'
 }
 
 ns_to_ps() {
-  local ns="${1:?usage: ns_to_ps <ns>}"
+  local NS="${1:?usage: ns_to_ps <ns>}"
 
-  awk -v ns="$ns" 'BEGIN {
+  awk -v ns="$NS" 'BEGIN {
     printf "%.6f", ns * 1000.0
   }'
 }
 
 steps_to_ps() {
-  local steps="${1:?usage: steps_to_ps <steps>}"
-  local dt_ps="${2:-0.002}"
+  local STEPS="${1:?usage: steps_to_ps <steps>}"
+  local DT_PS="${2:-0.002}"
 
-  awk -v steps="$steps" -v dt="$dt_ps" 'BEGIN {
+  awk -v steps="$STEPS" -v dt="$DT_PS" 'BEGIN {
     printf "%.6f", steps * dt
   }'
 }
@@ -71,15 +71,15 @@ TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
 ## GROMACS parameter helpers
 
 write_cg_mdp() {
-  local outfile="$INPUT_DIR/gromacs-cg.mdp"
-  local nsteps="${1:-250000}"
+  local OUTFILE="$INPUT_DIR/gromacs-cg.mdp"
+  local NSTEPS="${1:-250000}"
 
-  cat > "$outfile" <<EOF
+  cat > "$OUTFILE" <<EOF
 ; Modified gromacs-cg.mdp for Pseudo-PBC
 define              = -DPOSRES -DPOSRES_WATER
 constraints         = none
 integrator          = cg          ; Conjugate Gradient minimization
-nsteps              = ${nsteps}      ; Max steps
+nsteps              = ${NSTEPS}      ; Max steps
 nstlist             = 10
 cutoff-scheme       = Verlet
 ns_type             = simple      ; Use simple for minimization
@@ -94,22 +94,22 @@ EOF
 }
 
 write_md_mdp() {
-  local outfile="$INPUT_DIR/gromacs-md.mdp"
-  local nsteps="${1:-500000}" # default is total 1 ns.
-  local save_every_steps="${2:-500}"
-  local dt="${3:-0.002}"
+  local OUTFILE="$INPUT_DIR/gromacs-md.mdp"
+  local NSTEPS="${1:-500000}" # default is total 1 ns.
+  local SAVE_EVERY_STEPS="${2:-500}"
+  local DT="${3:-0.002}"
 
-  cat > "$outfile" <<EOF
+  cat > "$OUTFILE" <<EOF
 ; Modified gromacs-md.mdp for Pseudo-PBC
 cpp                 = /usr/bin/cpp
 define              = -DPOSRES
 constraints         = all-bonds
 integrator          = md
-dt                  = ${dt}
-nsteps              = ${nsteps}
+dt                  = ${DT}
+nsteps              = ${NSTEPS}
 nstcomm             = 500
-nstxout             = ${save_every_steps}
-nstvout             = ${save_every_steps}
+nstxout             = ${SAVE_EVERY_STEPS}
+nstvout             = ${SAVE_EVERY_STEPS}
 nstfout             = 0
 nstlog              = 500
 nstenergy           = 500
@@ -139,15 +139,15 @@ EOF
 }
 
 write_st_mdp() {
-  local outfile="$INPUT_DIR/gromacs-st.mdp"
-  local nsteps="${1:-50000}"
+  local OUTFILE="$INPUT_DIR/gromacs-st.mdp"
+  local NSTEPS="${1:-50000}"
 
-  cat > "$outfile" <<EOF
+  cat > "$OUTFILE" <<EOF
 ; GROMACS Minimization in Vacuum (Pseudo-PBC)
 ;
 define              = -DPOSRES -DPOSRES_WATER ; Use if you have position restraints
 integrator          = steep                    ; Steepest descent minimization
-nsteps              = ${nsteps}                    ; Max steps (use more than 50k for safety)
+nsteps              = ${NSTEPS}                    ; Max steps (use more than 50k for safety)
 
 ; Neighbor searching parameters for pseudo-PBC
 nstlist             = 10
@@ -171,9 +171,9 @@ EOF
 ##
 
 write_runtime() {
-  local elapsed="$SECONDS"
-  printf 'runtime for mm is %s seconds\\n' "$elapsed" > "$TIMEFILE"
-  log "Runtime written to $TIMEFILE: $elapsed seconds"
+  local ELAPSED="$SECONDS"
+  printf 'runtime for mm is %s seconds\n' "$ELAPSED" > "$TIMEFILE"
+  log "Runtime written to $TIMEFILE: $ELAPSED seconds"
 }
 trap write_runtime EXIT
 

@@ -5,31 +5,31 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
 
 ns_to_steps() {
-  local ns="${1:?usage: ns_to_steps <nanoseconds> [dt_fs]}"
-  local dt_fs="${2:-1.0}"
+  local NS="${1:?usage: ns_to_steps <nanoseconds> [dt_fs]}"
+  local DT_FS="${2:-1.0}"
 
-  awk -v ns="$ns" -v dt="$dt_fs" 'BEGIN {
-    printf "%.0f\n", (ns * 1000000) / dt
+  awk -v NS="$NS" -v DT="$DT_FS" 'BEGIN {
+    printf "%.0f\n", (NS * 1000000) / DT
   }'
 }
 
 ns_to_ps() {
-  local ns="${1:?usage: ns_to_ps <nanoseconds>}"
-  awk -v ns="$ns" 'BEGIN {
-    printf "%.6f\n", ns * 1000.0
+  local NS="${1:?usage: ns_to_ps <nanoseconds>}"
+  awk -v NS="$NS" 'BEGIN {
+    printf "%.6f\n", NS * 1000.0
   }'
 }
 
 arc_lines_per_frame() {
-  local arc="${1:?usage: arc_lines_per_frame <file.arc>}"
+  local ARC_FILE="${1:?usage: arc_lines_per_frame <file.arc>}"
 
-  local natoms second_first
-  natoms=$(awk 'NR==1 {print $1; exit}' "$arc")
-  second_first=$(awk 'NR==2 {print $1; exit}' "$arc")
+  local N_ATOMS SECOND_FIRST
+  N_ATOMS=$(awk 'NR==1 {print $1; exit}' "$ARC_FILE")
+  SECOND_FIRST=$(awk 'NR==2 {print $1; exit}' "$ARC_FILE")
 
-  case "$second_first" in
-    *[!0-9]* ) echo $((natoms + 2)) ;;
-    * )        echo $((natoms + 1)) ;;
+  case "$SECOND_FIRST" in
+    *[!0-9]* ) echo $((N_ATOMS + 2)) ;;
+    * )        echo $((N_ATOMS + 1)) ;;
   esac
 }
 
@@ -101,39 +101,39 @@ EOF
 log "Step 5: Building restriction key for protein heavy atoms only (excluding all water atoms)"
 
 awk '
-function trim(s) {
-  gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
-  return s
+function trim(S) {
+  gsub(/^[[:space:]]+|[[:space:]]+$/, "", S)
+  return S
 }
 
-function is_hydrogen(atom, elem) {
-  atom = toupper(atom)
-  elem = toupper(elem)
+function is_hydrogen(ATOM, ELEM) {
+  ATOM = toupper(ATOM)
+  ELEM = toupper(ELEM)
 
   # Prefer element column when present.
-  if (elem != "") {
-    return (elem == "H")
+  if (ELEM != "") {
+    return (ELEM == "H")
   }
 
   # Fallback to atom name if needed.
-  return (atom ~ /^[0-9]*H/)
+  return (ATOM ~ /^[0-9]*H/)
 }
 
-function is_water_residue(resn) {
-  resn = toupper(resn)
-  return (resn ~ /^(HOH|WAT|SOL|H2O|DOD|D2O|TIP|OH2|OD2)$/)
+function is_water_residue(RESN) {
+  RESN = toupper(RESN)
+  return (RESN ~ /^(HOH|WAT|SOL|H2O|DOD|D2O|TIP|OH2|OD2)$/)
 }
 
 # Only protein/polymer ATOM records; ignore HETATM entirely.
 # Also exclude any water-like residue names just to be safe.
  /^ATOM  / {
-  serial = trim(substr($0, 7, 5))
-  atom   = trim(substr($0, 13, 4))
-  resn   = trim(substr($0, 18, 3))
-  elem   = trim(substr($0, 77, 2))
+  SERIAL = trim(substr($0, 7, 5))
+  ATOM   = trim(substr($0, 13, 4))
+  RESN   = trim(substr($0, 18, 3))
+  ELEM   = trim(substr($0, 77, 2))
 
-  if (!is_water_residue(resn) && !is_hydrogen(atom, elem)) {
-    print "RESTRICT  " serial "  200"
+  if (!is_water_residue(RESN) && !is_hydrogen(ATOM, ELEM)) {
+    print "RESTRICT  " SERIAL "  200"
   }
 }
 ' "$INPUT_PDB" > "${INPUT_DIR}/key.key"
@@ -167,8 +167,8 @@ if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
   fi
 
   ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
-  SAVE_INTERVAL_PS="$(awk -v steps="$SAVE_EVERY_STEPS" -v dt="$DT_FS" 'BEGIN {
-    printf "%.6f\n", (steps * dt) / 1000.0
+  SAVE_INTERVAL_PS="$(awk -v STEPS="$SAVE_EVERY_STEPS" -v DT="$DT_FS" 'BEGIN {
+    printf "%.6f\n", (STEPS * DT) / 1000.0
   }')"
 else
   SAVE_EVERY_STEPS="$N_STEPS"
@@ -193,22 +193,22 @@ ${SAVE_INTERVAL_PS}
 EOF
 
 # 7) Choose final structure source
-ARC="${INPUT_DIR}/${PDB_NAME}.arc"
+ARC_FILE="${INPUT_DIR}/${PDB_NAME}.arc"
 FINAL_XYZ=""
 
 if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
-  if [[ ! -f "$ARC" ]]; then
-    log "ERROR: ARC file not found: $ARC"
+  if [[ ! -f "$ARC_FILE" ]]; then
+    log "ERROR: ARC file not found: $ARC_FILE"
     exit 1
   fi
 
-  TOTAL_LINES=$(wc -l < "$ARC" | tr -d ' ')
-  LINES_PER_FRAME="$(arc_lines_per_frame "$ARC")"
+  TOTAL_LINES=$(wc -l < "$ARC_FILE" | tr -d ' ')
+  LINES_PER_FRAME="$(arc_lines_per_frame "$ARC_FILE")"
   LAST_FRAME_NUMBER=$((TOTAL_LINES / LINES_PER_FRAME))
   log "Last frame index in .arc file is ${LAST_FRAME_NUMBER}"
 
   log "Step 7: Extracting last frame with arcedit"
-  run_step arcedit "$ARC" <<EOF
+  run_step arcedit "$ARC_FILE" <<EOF
 2
 ${LAST_FRAME_NUMBER} ${LAST_FRAME_NUMBER} 1
 
@@ -251,8 +251,8 @@ fi
 log "Selected final PDB: ${LAST_PDB}"
 
 log "Step 9: Preparing final output"
-OUT="${INPUT_DIR}/next_step.pdb"
-cp -f -- "$LAST_PDB" "$OUT"
+OUTPUT_PDB="${INPUT_DIR}/next_step.pdb"
+cp -f -- "$LAST_PDB" "$OUTPUT_PDB"
 log "Copied final structure to next_step.pdb"
 
 if [[ "$MOBYWAT_OUTPUT_ENABLED" != "true" ]]; then
@@ -263,7 +263,7 @@ fi
 
 # 10) Build a multi-model trajectory PDB from the full ARC history
 log "Step 10: Building multi-model trajectory PDB from ARC"
-run_step xyzpdb "$ARC" <<EOF
+run_step xyzpdb "$ARC_FILE" <<EOF
 amber99.prm
 PDB
 EOF
@@ -272,7 +272,6 @@ log "Step 11: Reformatting PDB file"
 # xyzpdb produces NAME.pdb_3
 MOBYWAT_INPUT_PDB="system_mdl.pdb"
 cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_3" "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}"
-
 
 run_step "$SCRIPT_DIR/format-pdb.sh" "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}"
 log "${INPUT_DIR}/${MOBYWAT_INPUT_PDB} is ready to be processed by MobyWat!"

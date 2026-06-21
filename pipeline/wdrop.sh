@@ -39,79 +39,79 @@ usage() {
 }
 
 require_file() {
-  local path="$1"
-  local label="$2"
+  local PATH_VALUE="$1"
+  local LABEL="$2"
 
-  if [[ ! -f "$path" ]]; then
-    log "ERROR: expected $label not found: $path"
+  if [[ ! -f "$PATH_VALUE" ]]; then
+    log "ERROR: expected $LABEL not found: $PATH_VALUE"
     exit 1
   fi
 }
 
 move_everything_except() {
-  local target="$1"
+  local TARGET="$1"
   shift
-  local whitelist=("$@")
-  local item
-  local keep
-  local name
+  local WHITELIST=("$@")
+  local ITEM
+  local KEEP
+  local NAME
 
-  mkdir -p -- "$target"
+  mkdir -p -- "$TARGET"
 
-  for item in ./*; do
-    [[ -e "$item" ]] || continue
-    name="${item#./}"
-    keep=0
+  for ITEM in ./*; do
+    [[ -e "$ITEM" ]] || continue
+    NAME="${ITEM#./}"
+    KEEP=0
 
-    for w in "${whitelist[@]}"; do
-      if [[ "$name" == "$w" ]]; then
-        keep=1
+    for W in "${WHITELIST[@]}"; do
+      if [[ "$NAME" == "$W" ]]; then
+        KEEP=1
         break
       fi
     done
 
-    if [[ "$keep" -eq 0 ]]; then
-      log "Moving: $name -> $target/"
-      mv -- "$name" "$target/"
+    if [[ "$KEEP" -eq 0 ]]; then
+      log "Moving: $NAME -> $TARGET/"
+      mv -- "$NAME" "$TARGET/"
     fi
   done
 }
 
 run_wdrop_and_mm() {
-  local input_pdb="$1"
-  local waters="$2"
-  local wdrop_output="${input_pdb%.pdb}_${waters}WAT.pdb"
-  local mm_out="${wdrop_output%.pdb}_mm.pdb"
-  local md_duration="$3"
+  local INPUT_PDB_LOCAL="$1"
+  local WATERS="$2"
+  local WDROP_OUTPUT="${INPUT_PDB_LOCAL%.pdb}_${WATERS}WAT.pdb"
+  local MM_OUT="${WDROP_OUTPUT%.pdb}_mm.pdb"
+  local MD_DURATION="$3"
   local MOBYWAT_OUTPUT_ENABLED="$4"
   local REFERENCE_PDB_C="$5"
 
-  log "Current input: $input_pdb"
-  log "Expected wdrop output: $wdrop_output"
-  log "Expected mm output: $mm_out"
+  log "Current input: $INPUT_PDB_LOCAL"
+  log "Expected wdrop output: $WDROP_OUTPUT"
+  log "Expected mm output: $MM_OUT"
 
-  run_step wdrop "$input_pdb" 1.8 3.5 "$waters"
-  require_file "$wdrop_output" "wdrop output"
-  log "wdrop output found: $wdrop_output"
+  run_step wdrop "$INPUT_PDB_LOCAL" 1.8 3.5 "$WATERS"
+  require_file "$WDROP_OUTPUT" "wdrop output"
+  log "wdrop output found: $WDROP_OUTPUT"
 
   rm -f -- next_step.pdb
   log "Removed old next_step.pdb if present"
 
-  run_step run_mm_step "$MODE" "$wdrop_output" "$SCRIPT_DIR" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB_C"
+  run_step run_mm_step "$MODE" "$WDROP_OUTPUT" "$SCRIPT_DIR" "$MD_DURATION" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB_C"
   require_file "next_step.pdb" "MM output"
   log "MM output found: next_step.pdb"
 
-  cp -f -- next_step.pdb "$mm_out"
-  log "Copied next_step.pdb -> $mm_out"
+  cp -f -- next_step.pdb "$MM_OUT"
+  log "Copied next_step.pdb -> $MM_OUT"
 
-  LAST_MM_OUT="$mm_out"
+  LAST_MM_OUT="$MM_OUT"
 }
 
 on_error() {
-  local rc="$?"
-  local line="${BASH_LINENO[0]:-$LINENO}"
-  log "FAILED at line $line with exit code $rc"
-  exit "$rc"
+  local RC="$?"
+  local LINE="${BASH_LINENO[0]:-$LINENO}"
+  log "FAILED at line $LINE with exit code $RC"
+  exit "$RC"
 }
 
 on_exit() {
@@ -190,7 +190,7 @@ readonly OUTPUT_ROOT="$(make_output_dir "$INPUT_PDB" "$OUTPUT_TAG")"
 mkdir -p -- "$OUTPUT_ROOT"
 log "Output directory: $OUTPUT_ROOT"
 
-base_whitelist=(
+BASE_WHITELIST=(
   "$INPUT_FILE"
   "$(basename "$OUTPUT_ROOT")"
   "application.LOG"
@@ -200,39 +200,39 @@ base_whitelist=(
   "$(basename "$REFERENCE_PDB")" #Reference PDB might be in the working dir
 )
 
-current_in="$INPUT_FILE"
+CURRENT_IN="$INPUT_FILE"
 
-for ((i = 1; i <= ITERATIONS; i++)); do
-  log "===== ITERATION $i/$ITERATIONS ====="
+for ((I = 1; I <= ITERATIONS; I++)); do
+  log "===== ITERATION $I/$ITERATIONS ====="
 
-  if (( i == ITERATIONS )); then
+  if (( I == ITERATIONS )); then
     MOBYWAT_OUTPUT_ENABLED=true
     MD_DURATION=$FINAL_MD_DURATION
-    log "Iteration $i/$ITERATIONS: last iteration, md will run for $MD_DURATION nanosec"
+    log "Iteration $I/$ITERATIONS: last iteration, md will run for $MD_DURATION nanosec"
   else
     MOBYWAT_OUTPUT_ENABLED=false
     MD_DURATION=$INTERMEDIATE_MD_DURATION
-    log "Iteration $i/$ITERATIONS: not last iteration, md will run for $MD_DURATION nanosec"
+    log "Iteration $I/$ITERATIONS: not last iteration, md will run for $MD_DURATION nanosec"
   fi
 
   if [[ "$RUN_TYPE" == "LONG" ]]; then
-    run_dir="$OUTPUT_ROOT/$i"
+    RUN_DIR="$OUTPUT_ROOT/$I"
   else
-    run_dir="$OUTPUT_ROOT"
+    RUN_DIR="$OUTPUT_ROOT"
   fi
-  mkdir -p -- "$run_dir"
-  log "Run directory: $run_dir"
+  mkdir -p -- "$RUN_DIR"
+  log "Run directory: $RUN_DIR"
 
-  run_wdrop_and_mm "$current_in" "$WATERS_LAYERS_PER_RUN" "$MD_DURATION" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB"
+  run_wdrop_and_mm "$CURRENT_IN" "$WATERS_LAYERS_PER_RUN" "$MD_DURATION" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB"
 
-  move_everything_except "$run_dir" "${base_whitelist[@]}"
-  require_file "$run_dir/$(basename "$LAST_MM_OUT")" "moved MM result"
+  move_everything_except "$RUN_DIR" "${BASE_WHITELIST[@]}"
+  require_file "$RUN_DIR/$(basename "$LAST_MM_OUT")" "moved MM result"
 
-  if (( i < ITERATIONS )); then
-    cp -f -- "$run_dir/$(basename "$LAST_MM_OUT")" .
+  if (( I < ITERATIONS )); then
+    cp -f -- "$RUN_DIR/$(basename "$LAST_MM_OUT")" .
     log "Copied next input back into working dir: $(basename "$LAST_MM_OUT")"
-    current_in="$(basename "$LAST_MM_OUT")"
-    log "Next iteration input set to: $current_in"
+    CURRENT_IN="$(basename "$LAST_MM_OUT")"
+    log "Next iteration input set to: $CURRENT_IN"
   fi
 done
 
