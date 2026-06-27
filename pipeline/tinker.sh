@@ -104,59 +104,41 @@ amber99.prm
 EOF
 log "Generated XYZ file: ${INPUT_DIR}/${PDB_NAME}.xyz"
 
-# 4) Minimization
-log "Step 4: Running minimize (energy minimization)"
-run_step "$MINIMIZE_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz" <<EOF
-amber99.prm
+# 4) Build key file before minimize so protein is restrained during minimization.
+#    We use the NEGATIVE RANGE form of RESTRAIN-POSITION (-first last k) so that
+#    Tinker uses XYZ atom indices (not PDB serial numbers) and takes reference
+#    coordinates directly from the XYZ file at startup.  This avoids the
+#    PDB-serial ↔ XYZ-index mismatch that arises because pdbxyz inserts hydrogen
+#    atoms between heavy atoms, offsetting all subsequent serial numbers.
+log "Step 4: Building key file with protein restraints (before minimization)"
+
+# Count protein atoms: all XYZ atoms before the first water (OW/HW).
+PROTEIN_ATOMS=$(awk 'NR>1 && ($2=="OW" || $2=="HW") {print NR-2; exit}' \
+  "${INPUT_DIR}/${PDB_NAME}.xyz")
+
+if [[ -z "$PROTEIN_ATOMS" || "$PROTEIN_ATOMS" -lt 1 ]]; then
+  log "ERROR: could not determine protein atom count from XYZ file"
+  exit 1
+fi
+
+log "Protein atom count (heavy+H, before first water in XYZ): ${PROTEIN_ATOMS}"
+
+cat > "${INPUT_DIR}/key.key" <<EOF
+RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 1000.0
+PARAMETERS amber99.prm
+EOF
+
+log "Generated key.key: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 1000.0 (k=1000 kcal/mol/Å²)"
+
+# 5) Minimization — pass key.key so protein restraints are active.
+#    minimize9 reads PARAMETERS from the key file; stdin only needs the gradient criterion.
+log "Step 5: Running minimize (energy minimization with protein restraints)"
+run_step "$MINIMIZE_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz" -k "${INPUT_DIR}/key.key" <<EOF
 0.01
 EOF
 
-# 5) Build key file
-# We must not add constraint for WATER O or H
-log "Step 5: Building restriction key for protein heavy atoms only (excluding all water atoms)"
-
-awk '
-function trim(S) {
-  gsub(/^[[:space:]]+|[[:space:]]+$/, "", S)
-  return S
-}
-
-function is_hydrogen(ATOM, ELEM) {
-  ATOM = toupper(ATOM)
-  ELEM = toupper(ELEM)
-
-  # Prefer element column when present.
-  if (ELEM != "") {
-    return (ELEM == "H")
-  }
-
-  # Fallback to atom name if needed.
-  return (ATOM ~ /^[0-9]*H/)
-}
-
-function is_water_residue(RESN) {
-  RESN = toupper(RESN)
-  return (RESN ~ /^(HOH|WAT|SOL|H2O|DOD|D2O|TIP|OH2|OD2)$/)
-}
-
-# Only protein/polymer ATOM records; ignore HETATM entirely.
-# Also exclude any water-like residue names just to be safe.
- /^ATOM  / {
-  SERIAL = trim(substr($0, 7, 5))
-  ATOM   = trim(substr($0, 13, 4))
-  RESN   = trim(substr($0, 18, 3))
-  ELEM   = trim(substr($0, 77, 2))
-
-  if (!is_water_residue(RESN) && !is_hydrogen(ATOM, ELEM)) {
-    print "RESTRICT  " SERIAL "  200"
-  }
-}
-' "$INPUT_PDB" > "${INPUT_DIR}/key.key"
-
-log "Generated key.key with restrictions for protein heavy atoms only"
-
+# Append dynamics-specific settings after minimization completes.
 cat >> "${INPUT_DIR}/key.key" <<EOF
-PARAMETERS amber99.prm
 
 RATTLE
 vdw-cutoff 9.0
