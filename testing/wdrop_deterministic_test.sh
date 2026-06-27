@@ -4,7 +4,7 @@ set -Eeuo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-PASS_BIN="$PROJECT_ROOT/src/pass"
+WDROP_BIN="$PROJECT_ROOT/src/wdrop"
 INPUT_PDB="$PROJECT_ROOT/src/1PSV.pdb"
 N=1000
 SIGMA_P="1.8"
@@ -18,23 +18,23 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Run pass repeatedly with the same input, hash each generated PDB, and fail if
+Run wdrop repeatedly with the same input, hash each generated PDB, and fail if
 any hash differs from the first run.
 
 Default command under test:
-  pass ../src/1PSV.pdb 1.8 3.5 5
+  wdrop --file input.pdb --sigma 1.8 --weed-dist 3.5 --layers 5
 
 Options:
-  -n, --runs N          Number of runs (default: 1000)
-  -p, --pass-bin PATH   pass executable path (default: ../src/pass)
-  -i, --input PATH      input PDB path (default: ../src/1PSV.pdb)
-  -w, --work-dir DIR    directory for per-run files (default: mktemp in /tmp)
-  --clean               remove work directory after a successful run
-  --sigma VALUE         sigma_p argument (default: 1.8)
-  --weed-dist VALUE     weed_dist argument (default: 3.5)
-  --layers N            n_layers argument (default: 5)
-  --progress-every N    print progress every N runs, 0 disables (default: 100)
-  -h, --help            show this help message
+  -n, --runs N           Number of runs (default: 1000)
+  -p, --wdrop-bin PATH   wdrop executable path (default: ../src/wdrop)
+  -i, --input PATH       input PDB path (default: ../src/1PSV.pdb)
+  -w, --work-dir DIR     directory for per-run files (default: mktemp in /tmp)
+  --clean                remove work directory after a successful run
+  --sigma VALUE          probe radius, default: 1.8
+  --weed-dist VALUE      minimal O-O distance, default: 3.5
+  --layers N             number of water layers, default: 5
+  --progress-every N     print progress every N runs, 0 disables (default: 100)
+  -h, --help             show this help message
 
 Examples:
   $(basename "$0")
@@ -64,9 +64,9 @@ parse_args() {
         N="$2"
         shift 2
         ;;
-      -p|--pass-bin)
+      -p|--wdrop-bin)
         [[ $# -ge 2 ]] || die "$1 requires a value"
-        PASS_BIN="$2"
+        WDROP_BIN="$2"
         shift 2
         ;;
       -i|--input)
@@ -129,15 +129,15 @@ prepare() {
   is_positive_integer "$LAYERS" || die "--layers must be a positive integer"
   [[ "$PROGRESS_EVERY" =~ ^[0-9]+$ ]] || die "--progress-every must be a non-negative integer"
 
-  [[ -x "$PASS_BIN" ]] || die "pass executable not found or not executable: $PASS_BIN"
+  [[ -x "$WDROP_BIN" ]] || die "wdrop executable not found or not executable: $WDROP_BIN"
   [[ -f "$INPUT_PDB" ]] || die "input PDB not found: $INPUT_PDB"
   command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
 
-  PASS_BIN="$(cd "$(dirname "$PASS_BIN")" && pwd)/$(basename "$PASS_BIN")"
+  WDROP_BIN="$(cd "$(dirname "$WDROP_BIN")" && pwd)/$(basename "$WDROP_BIN")"
   INPUT_PDB="$(cd "$(dirname "$INPUT_PDB")" && pwd)/$(basename "$INPUT_PDB")"
 
   if [[ -z "$WORK_DIR" ]]; then
-    WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pass-determinism.XXXXXX")"
+    WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wdrop-determinism.XXXXXX")"
   else
     mkdir -p "$WORK_DIR"
     WORK_DIR="$(cd "$WORK_DIR" && pwd)"
@@ -167,12 +167,13 @@ run_once() {
 
   if (
     cd "$run_dir"
-    "$PASS_BIN" "$input_name" "$SIGMA_P" "$WEED_DIST" "$LAYERS" >stdout.txt 2>stderr.txt
+    "$WDROP_BIN" --file "$input_name" --sigma "$SIGMA_P" --weed-dist "$WEED_DIST" --layers "$LAYERS" \
+      >stdout.txt 2>stderr.txt
   ); then
     :
   else
     local status=$?
-    printf 'pass failed in run %06d with exit code %d\n' "$run_no" "$status" >&2
+    printf 'wdrop failed in run %06d with exit code %d\n' "$run_no" "$status" >&2
     printf 'Run directory: %s\n' "$run_dir" >&2
     if [[ -s "$run_dir/stderr.txt" ]]; then
       printf 'Last stderr lines:\n' >&2
@@ -198,7 +199,7 @@ main() {
   : > "$hashes_file"
 
   log "Running $N deterministic checks"
-  log "Command: $PASS_BIN input.pdb $SIGMA_P $WEED_DIST $LAYERS"
+  log "Command: $WDROP_BIN --file input.pdb --sigma $SIGMA_P --weed-dist $WEED_DIST --layers $LAYERS"
   log "Input: $INPUT_PDB"
   log "Work directory: $WORK_DIR"
 

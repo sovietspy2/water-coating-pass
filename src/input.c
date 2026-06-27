@@ -45,12 +45,24 @@ ap *read_in_pdb (char *file_name, int *atom_num, int mdl_serno) {
 				}
 			if ( mdl_serno <= -1 ) line_indicator = 1;		// mdl_serno <= -1 if separate pdb file to be read
 			if ( line_indicator == 1 && ( strncmp (atom_token, line, PDB_TOKEN_LENGTH) == 0 || strncmp (hetatm_token, line, PDB_TOKEN_LENGTH) == 0 ) )  {
-				if ( counter == 0) molecule = (ap *) malloc(sizeof(ap));
-					else {
-						x = realloc( molecule, (counter+1) * sizeof(ap) );
-						if (x) molecule = x;
-						x = NULL;
-						}
+				if ( counter == 0 ) {
+					molecule = (ap *) malloc(sizeof(ap));
+					if (!molecule) {
+						fprintf(stderr, "Error: Memory allocation failed.\n");
+						fclose(f_pdb);
+						return NULL;
+					}
+				} else {
+					x = realloc( molecule, (counter+1) * sizeof(ap) );
+					if (!x) {
+						fprintf(stderr, "Error: Memory allocation failed.\n");
+						free(molecule);
+						fclose(f_pdb);
+						return NULL;
+					}
+					molecule = x;
+					x = NULL;
+				}
 				(molecule+counter)->model_ser = DEF_MODEL_NO;
 				strncpy ((molecule+counter)->pdb_token, line, PDB_TOKEN_LENGTH);	
 				(molecule+counter)->pdb_token[PDB_TOKEN_LENGTH] = '\0';				
@@ -105,7 +117,7 @@ ap *read_in_pdb (char *file_name, int *atom_num, int mdl_serno) {
 		*(int *)atom_num = counter;
 
 
-		if ( (g_v == 'v' || g_v == 'd') && (molecule+counter-1)->atom_ser != *(int *)atom_num ) {
+		if ( counter > 0 && (g_v == 'v' || g_v == 'd') && (molecule+counter-1)->atom_ser != *(int *)atom_num ) {
 			printf("%s%s\n","\nWARNING! Number of ATOM/HETATM entries does not match with maximum atom serial number in file ",file_name); 
 			printf("%s%d%s","WARNING! Number of ATOM/HETATM entries:   ",*(int *)atom_num,"\n");	
 			printf("%s%d%s","WARNING! Maximum atom serial number:      ",(molecule+counter-1)->atom_ser,"\n");			

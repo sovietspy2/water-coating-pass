@@ -143,7 +143,7 @@ static int grid_build(grid3d *g, const vec3 *pos, const double *sigma, size_t n,
     if (g->nz < 1) g->nz = 1;
 
     grid_sz = (size_t)g->nx * (size_t)g->ny * (size_t)g->nz;
-    if (grid_sz == 0 || grid_sz > ((size_t)INT_MAX * 16u)) return 0;
+    if (grid_sz == 0 || grid_sz > (size_t)INT_MAX) return 0;
 
     g->head = (int*)malloc(grid_sz * sizeof(int));
     g->next = (int*)malloc(n * sizeof(int));
@@ -318,14 +318,22 @@ static int grid_pts_ensure_capacity(grid_pts *gp) {
     if (gp->n < gp->cap) return 1;
 
     size_t new_cap = (gp->cap == 0) ? 1024 : gp->cap * 2;
-    int *new_next = (int*)realloc(gp->next, new_cap * sizeof(int));
-    vec3 *new_pts = (vec3*)realloc(gp->pts, new_cap * sizeof(vec3));
+
+    int *new_next = (int*)malloc(new_cap * sizeof(int));
+    vec3 *new_pts = (vec3*)malloc(new_cap * sizeof(vec3));
     if (!new_next || !new_pts) {
-        if (new_next) gp->next = new_next;
-        if (new_pts) gp->pts = new_pts;
+        free(new_next);
+        free(new_pts);
         return 0;
     }
 
+    if (gp->n > 0) {
+        memcpy(new_next, gp->next, gp->n * sizeof(int));
+        memcpy(new_pts, gp->pts, gp->n * sizeof(vec3));
+    }
+
+    free(gp->next);
+    free(gp->pts);
     gp->next = new_next;
     gp->pts = new_pts;
     gp->cap = new_cap;

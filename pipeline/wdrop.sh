@@ -123,7 +123,8 @@ trap on_exit EXIT
 
 [[ $# -eq 3 || $# -eq 4 ]] || usage
 
-readonly INPUT_PDB="$(normalize_input_pdb "$1")"
+INPUT_PDB="$(normalize_input_pdb "$1")"
+readonly INPUT_PDB
 readonly MODE="$2"
 readonly RUN_TYPE="${3^^}"
 readonly REFERENCE_PDB="${4:-}"
@@ -186,7 +187,8 @@ run_step "$SCRIPT_DIR/target-pdb-preprocessor.py" "$INPUT_PDB"
 cd "$INPUT_DIR"
 log "Working directory: $INPUT_DIR"
 
-readonly OUTPUT_ROOT="$(make_output_dir "$INPUT_PDB" "$OUTPUT_TAG")"
+OUTPUT_ROOT="$(make_output_dir "$INPUT_PDB" "$OUTPUT_TAG")"
+readonly OUTPUT_ROOT
 mkdir -p -- "$OUTPUT_ROOT"
 log "Output directory: $OUTPUT_ROOT"
 

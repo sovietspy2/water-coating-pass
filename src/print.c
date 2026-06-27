@@ -10,7 +10,7 @@ char *create_log_file_name(const char *input, const char *sep)
     if (localtime_r(&now, &tm_local) == NULL) return NULL;
 
     char dt[32];
-    if (strftime(dt, sizeof dt, "pass-%Y-%m-%d %H:%M:%S", &tm_local) == 0) return NULL;
+    if (strftime(dt, sizeof dt, "wdrop-%Y-%m-%d %H:%M:%S", &tm_local) == 0) return NULL;
 
     int needed = snprintf(NULL, 0, "%s%s%s", input, sep, dt);
     if (needed < 0) return NULL;
@@ -35,7 +35,11 @@ char *print_pdb_file (ap *pdb, int atom_num, char file_out [MAX_FILENAME_LENGTH]
 
     char *print_pdb_line (ap *pdb, int index, char pdbqt_ind, int pdbqt_rank);
 
-    outfile=fopen(file_out,"w");
+    outfile = fopen(file_out, "w");
+    if (!outfile) {
+        fprintf(stderr, "Error: Cannot open output file: %s\n", file_out);
+        return NULL;
+    }
 
     sprintf(header,"%s","REMARK Input coordinates.\nMODEL        1\n");
     fputs(header,outfile);

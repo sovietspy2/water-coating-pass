@@ -50,7 +50,7 @@ DT_PS="0.001" # 1 femtosecond
 
 # Setup logging in the INPUT_DIR (output directory)
 LOGFILE="${INPUT_DIR}/application.LOG"
-setup_logging $LOGFILE
+setup_logging "$LOGFILE"
 
 log "Starting gromacs.sh (GROMACS mode)"
 log "INPUT_PDB=$INPUT_PDB"
