@@ -171,6 +171,15 @@ else
   log "Fast mode enabled: NO-ARCHIVE written to key.key"
 fi
 
+# Tinker9-GPU: two extra key.key settings required for GPU execution.
+# 1) Beeman integrator (CPU default) is not implemented in Tinker9-GPU — use velocity Verlet.
+# 2) REMOVE-INERTIA 0: disables angular-momentum removal (mdrestRemoveAngularMomentum_cu is
+#    unimplemented for non-PBC systems in Tinker9-GPU — harmless to skip for short runs).
+if [[ -n "${TINKER_GPU:-}" ]]; then
+  printf 'INTEGRATOR VERLET\nREMOVE-INERTIA 0\n' >> "${INPUT_DIR}/key.key"
+  log "TINKER_GPU: added INTEGRATOR VERLET + REMOVE-INERTIA 0 to key.key"
+fi
+
 # 6) Dynamics setup
 N_STEPS="$(ns_to_steps "$MD_DURATION" "$DT_FS")"
 TOTAL_TIME_PS="$(ns_to_ps "$MD_DURATION")"
