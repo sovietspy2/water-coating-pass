@@ -336,7 +336,7 @@ EOF
   run_step "${SCRIPT_DIR}"/remove-ter-id.sh ${SYSTEM_REF_PDB}
 
   log "Running mobywat validation"
-  run_step mobywat -t [A] -w Auto -n 0-1000 -m Analysis -v Diagnostic
+
 else
   log "REFERENCE_PDB is missing or empty, PREDICTION MODE!"
   log "Running mobywat prediction"
@@ -365,8 +365,8 @@ EOF
 EOF
 
   run_step gmx editconf -label A -f system_tpy.pdb -o system_tpy.pdb # not sure if this is the right way to do it
-
-  run_step mobywat -t [A] -w Auto -n 0-1000 -m Prediction -cls MER
 fi
+
+run_step mobywat -t [A] -w Auto -n 0-1000 -m Prediction -cls MER
 
 log "gromacs.sh completed successfully"

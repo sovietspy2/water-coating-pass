@@ -300,11 +300,10 @@ if [[ -n "${REFERENCE_PDB:-}" ]]; then
   run_step "${SCRIPT_DIR}"/remove-ter-id.sh ${SYSTEM_REF_PDB}
 
   log "Running mobywat validation"
-  run_step mobywat -f ${MOBYWAT_INPUT_PDB} -r ${SYSTEM_REF_PDB} -t [A] -w Auto -n 1-1000 -cls MER -m Analysis -v Diagnostic
 else
   log "REFERENCE_PDB is missing or empty, PREDICTION MODE!"
-  log "Running mobywat prediction"
-  run_step mobywat -f ${MOBYWAT_INPUT_PDB} -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
 fi
+
+run_step mobywat -f ${MOBYWAT_INPUT_PDB} -r ${SYSTEM_REF_PDB} -t [A] -w Auto -n 1-1000 -cls MER -m Analysis -v Diagnostic
 
 log "tinker.sh completed successfully"
