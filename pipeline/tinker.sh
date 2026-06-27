@@ -60,6 +60,21 @@ log "TARGET_FRAMES=$TARGET_FRAMES"
 log "DT_FS=$DT_FS"
 log "REFERENCE_PDB=$REFERENCE_PDB"
 
+# Tinker9-GPU support: export TINKER_GPU=1 to use GPU-accelerated commands.
+# Only dynamic and minimize have GPU counterparts; file-format utilities
+# (pdbxyz, arcedit, xyzpdb) are unchanged — Tinker9 uses identical file formats.
+if [[ -n "${TINKER_GPU:-}" ]]; then
+    MINIMIZE_CMD="minimize9"
+    DYNAMIC_CMD="dynamic9"
+    command -v minimize9 >/dev/null 2>&1 || { log "ERROR: minimize9 not found in PATH (TINKER_GPU is set)"; exit 1; }
+    command -v dynamic9  >/dev/null 2>&1 || { log "ERROR: dynamic9 not found in PATH (TINKER_GPU is set)";  exit 1; }
+    log "TINKER_GPU is set: using Tinker9-GPU commands (minimize9, dynamic9)"
+else
+    MINIMIZE_CMD="minimize"
+    DYNAMIC_CMD="dynamic"
+    log "TINKER_GPU is not set: using standard Tinker CPU commands (minimize, dynamic)"
+fi
+
 SECONDS=0
 TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
 
@@ -91,7 +106,7 @@ log "Generated XYZ file: ${INPUT_DIR}/${PDB_NAME}.xyz"
 
 # 4) Minimization
 log "Step 4: Running minimize (energy minimization)"
-run_step minimize "${INPUT_DIR}/${PDB_NAME}.xyz" <<EOF
+run_step "$MINIMIZE_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz" <<EOF
 amber99.prm
 0.01
 EOF
@@ -184,7 +199,7 @@ log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
 log "SAVE_INTERVAL_PS=$SAVE_INTERVAL_PS ps"
 log "Expected saved frames ~= $ACTUAL_FRAMES"
 
-run_step dynamic "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "${INPUT_DIR}/key.key" <<EOF
+run_step "$DYNAMIC_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "${INPUT_DIR}/key.key" <<EOF
 ${N_STEPS}
 ${DT_FS}
 ${SAVE_INTERVAL_PS}
