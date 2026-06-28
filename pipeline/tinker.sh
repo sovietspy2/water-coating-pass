@@ -123,22 +123,25 @@ fi
 
 log "Protein atom count (heavy+H, before first water in XYZ): ${PROTEIN_ATOMS}"
 
-cat > "${INPUT_DIR}/key.key" <<EOF
-RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0
+cat > "${INPUT_DIR}/minimize.key" <<EOF
+RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 10.0
 PARAMETERS amber99.prm
 EOF
 
-log "Generated key.key: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0"
+log "Generated minimize.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 10.0"
 
-# 5) Minimization — pass key.key so protein restraints are active.
+# 5) Minimization — pass minimze.key so protein restraints are active.
 #    minimize9 reads PARAMETERS from the key file; stdin only needs the gradient criterion.
 log "Step 5: Running minimize (energy minimization with protein restraints)"
-run_step "$MINIMIZE_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz" -k "${INPUT_DIR}/key.key" <<EOF
+run_step "$MINIMIZE_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz" -k "${INPUT_DIR}/minimize.key" <<EOF
 0.01
 EOF
 
+log "Generated md.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0"
 # Append dynamics-specific settings after minimization completes.
-cat >> "${INPUT_DIR}/key.key" <<EOF
+cat >> "${INPUT_DIR}/md.key" <<EOF
+PARAMETERS amber99.prm
+RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0
 
 RATTLE
 vdw-cutoff 9.0
@@ -146,20 +149,20 @@ chg-cutoff 9.0
 EOF
 
 if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
-  echo "ARCHIVE" >> "${INPUT_DIR}/key.key"
-  log "Trajectory mode enabled: ARCHIVE written to key.key"
+  echo "ARCHIVE" >> "${INPUT_DIR}/md.key"
+  log "Trajectory mode enabled: ARCHIVE written to md.key"
 else
-  echo "NO-ARCHIVE" >> "${INPUT_DIR}/key.key"
-  log "Fast mode enabled: NO-ARCHIVE written to key.key"
+  echo "NO-ARCHIVE" >> "${INPUT_DIR}/md.key"
+  log "Fast mode enabled: NO-ARCHIVE written to md.key"
 fi
 
-# Tinker9-GPU: two extra key.key settings required for GPU execution.
+# Tinker9-GPU: two extra key settings required for GPU execution.
 # 1) Beeman integrator (CPU default) is not implemented in Tinker9-GPU — use velocity Verlet.
 # 2) REMOVE-INERTIA 0: disables angular-momentum removal (mdrestRemoveAngularMomentum_cu is
 #    unimplemented for non-PBC systems in Tinker9-GPU — harmless to skip for short runs).
 if [[ -n "${TINKER_GPU:-}" ]]; then
-  printf 'INTEGRATOR VERLET\nREMOVE-INERTIA 0\n' >> "${INPUT_DIR}/key.key"
-  log "TINKER_GPU: added INTEGRATOR VERLET + REMOVE-INERTIA 0 to key.key"
+  printf 'INTEGRATOR VERLET\nREMOVE-INERTIA 0\n' >> "${INPUT_DIR}/md.key"
+  log "TINKER_GPU: added INTEGRATOR VERLET + REMOVE-INERTIA 0 to md.key"
 fi
 
 # 6) Dynamics setup
@@ -190,7 +193,7 @@ log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
 log "SAVE_INTERVAL_PS=$SAVE_INTERVAL_PS ps"
 log "Expected saved frames ~= $ACTUAL_FRAMES"
 
-run_step "$DYNAMIC_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "${INPUT_DIR}/key.key" <<EOF
+run_step "$DYNAMIC_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "${INPUT_DIR}/md.key" <<EOF
 ${N_STEPS}
 ${DT_FS}
 ${SAVE_INTERVAL_PS}
