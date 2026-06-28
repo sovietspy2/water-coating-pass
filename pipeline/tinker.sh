@@ -304,6 +304,6 @@ else
   log "REFERENCE_PDB is missing or empty, PREDICTION MODE!"
 fi
 
-run_step mobywat -f ${MOBYWAT_INPUT_PDB} -r ${SYSTEM_REF_PDB} -t [A] -w Auto -n 1-1000 -cls MER -m Analysis -v Diagnostic
+run_step mobywat -f ${MOBYWAT_INPUT_PDB} -r ${SYSTEM_REF_PDB} -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
 
 log "tinker.sh completed successfully"

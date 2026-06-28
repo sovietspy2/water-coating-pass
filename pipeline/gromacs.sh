@@ -367,6 +367,6 @@ EOF
   run_step gmx editconf -label A -f system_tpy.pdb -o system_tpy.pdb # not sure if this is the right way to do it
 fi
 
-run_step mobywat -t [A] -w Auto -n 0-1000 -m Prediction -cls MER
+run_step mobywat -t [A] -w Auto -n 0-1000 -m Prediction -cls MER -v Diagnostic
 
 log "gromacs.sh completed successfully"
