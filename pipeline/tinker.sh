@@ -128,7 +128,7 @@ RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0
 PARAMETERS amber99.prm
 EOF
 
-log "Generated key.key: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 1000.0 (k=1000 kcal/mol/Å²)"
+log "Generated key.key: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0"
 
 # 5) Minimization — pass key.key so protein restraints are active.
 #    minimize9 reads PARAMETERS from the key file; stdin only needs the gradient criterion.
