@@ -24,6 +24,9 @@ If any of these are missing, the installer runs the corresponding helper script:
 - `wdrop/install.sh`
 - `mobywat/install.sh`
 
+## Optional Tinker9-GPU install
+
+For non-technical users or standard laboratory PCs, we recommend Tinker CPU, which is installed automatically by our scripts. For users seeking enhanced molecular dynamics performance, we also provide an installer for `tinker9-gpu`, which can significantly improve MD performance. This option requires a modern, high-performance NVIDIA graphics card. We recommend installing this software manually from its official Git [repository](https://github.com/TinkerTools/tinker-gpu). An example installation script is provided, though it may require some adjustment due to its many components. The script can be found here: `installer/tinker/tinker-gpu-install.sh`
 
 ## PATH handling
 
