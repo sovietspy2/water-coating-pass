@@ -124,7 +124,7 @@ fi
 log "Protein atom count (heavy+H, before first water in XYZ): ${PROTEIN_ATOMS}"
 
 cat > "${INPUT_DIR}/key.key" <<EOF
-RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 100.0
+RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0
 PARAMETERS amber99.prm
 EOF
 
