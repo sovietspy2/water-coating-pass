@@ -63,10 +63,14 @@ log "REFERENCE_PDB=$REFERENCE_PDB"
 # Tinker9-GPU support: export TINKER_GPU=1 to use GPU-accelerated commands.
 # Only dynamic and minimize have GPU counterparts; file-format utilities
 # (pdbxyz, arcedit, xyzpdb) are unchanged — Tinker9 uses identical file formats.
-if [[ -n "${TINKER_GPU:-}" ]]; then
+case "${TINKER_GPU:-0}" in
+    ''|0|false|no|off) TINKER_GPU_ENABLED=false ;;
+    *)                 TINKER_GPU_ENABLED=true ;;
+esac
+if [[ "$TINKER_GPU_ENABLED" == true ]]; then
     DYNAMIC_CMD="dynamic9"
     command -v dynamic9  >/dev/null 2>&1 || { log "ERROR: dynamic9 not found in PATH (TINKER_GPU is set)";  exit 1; }
-    log "TINKER_GPU is set: using Tinker9-GPU commands (minimize9, dynamic9)"
+    log "TINKER_GPU is set: using Tinker9-GPU commands (dynamic9)"
 else
     DYNAMIC_CMD="dynamic"
     log "TINKER_GPU is not set: using standard Tinker CPU commands (minimize, dynamic)"
@@ -157,7 +161,7 @@ fi
 # 1) Beeman integrator (CPU default) is not implemented in Tinker9-GPU — use velocity Verlet.
 # 2) REMOVE-INERTIA 0: disables angular-momentum removal (mdrestRemoveAngularMomentum_cu is
 #    unimplemented for non-PBC systems in Tinker9-GPU — harmless to skip for short runs).
-if [[ -n "${TINKER_GPU:-}" ]]; then
+if [[ "$TINKER_GPU_ENABLED" == true ]]; then
   printf 'INTEGRATOR VERLET\nREMOVE-INERTIA 0\n' >> "${INPUT_DIR}/md.key"
   log "TINKER_GPU: added INTEGRATOR VERLET + REMOVE-INERTIA 0 to md.key"
 fi
