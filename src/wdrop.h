@@ -8,32 +8,32 @@
 
 #include <stddef.h>  // size_t
 
-/* HOH oxigén sugár PyMOL vdW szerint kb. 1.52 Å (PASS táblázatból) */
+/* HOH oxygen radius per PyMOL vdW is about 1.52 Å (from the PASS table) */
 static const double SIGMA_HOH_O = 1.52;
 static const double EPS = 1e-9;
-static const double CLASH_TOL = 1e-4; /* numerikus tolerancia ütközés ellenőrzéshez */
+static const double CLASH_TOL = 1e-4; /* numerical tolerance for clash checking */
 
-/* Egyszerű 3D vektor típus a számolásokhoz. */
+/* Simple 3D vector type for the calculations. */
 typedef struct {
     double x, y, z;
 } vec3;
 
 /*
- * Appendix A: Three-Point Sphere Geometry (jelölések az ábrához igazítva)
+ * Appendix A: Three-Point Sphere Geometry (notation aligned with the figure)
  *
- * Bemenet:
- *   i, j, k  - a három atom középpontja (pontok)
- *   sigma_i, sigma_j, sigma_k - a három atom sugara (σ_i, σ_j, σ_k)
- *   sigma_p  - a próbagömb sugara (σ_p)
+ * Input:
+ *   i, j, k  - the centers of the three atoms (points)
+ *   sigma_i, sigma_j, sigma_k - the radii of the three atoms (σ_i, σ_j, σ_k)
+ *   sigma_p  - the probe sphere radius (σ_p)
  *
- * Kimenet:
- *   p_plus, p_minus - a két lehetséges megoldás p (a háromszög síkja fölött / alatt)
- *   U_out, V_out, h_out - az ábrán szereplő U, V és h (opcionális; lehet NULL)
+ * Output:
+ *   p_plus, p_minus - the two possible solutions p (above / below the triangle plane)
+ *   U_out, V_out, h_out - the U, V and h shown in the figure (optional; may be NULL)
  *
- * Visszatérés:
- *   0: nincs valós megoldás
- *   1: egy megoldás (érintő eset, h = 0)
- *   2: két megoldás (h > 0)
+ * Returns:
+ *   0: no real solution
+ *   1: one solution (tangent case, h = 0)
+ *   2: two solutions (h > 0)
  */
 int three_point_sphere_geometry(
     vec3 i, double sigma_i,
@@ -48,30 +48,30 @@ int three_point_sphere_geometry(
 );
 
 /*
- * PASS-szerű "bevonás" (egyszerűsített): új HOH oxigéneket adunk hozzá a listához.
+ * PASS-like "coating" (simplified): add new HOH oxygens to the list.
  *
  * atoms_io / n_atoms_io / cap_io:
- *   dinamikus tömbkezelés: ha nincs elég kapacitás, realloc történik.
+ *   dynamic array handling: if capacity is insufficient, a realloc happens.
  *
  * model_ser:
- *   az új atomok model/frame sorszáma.
+ *   the model/frame serial number of the new atoms.
  *
  * sigma_p:
- *   próbagömb sugara (σ_p).
+ *   probe sphere radius (σ_p).
  *
  * weed_dist:
- *   minimális távolság két újonnan felvett pont között ugyanazon iterációban.
+ *   minimum distance between two newly added points within the same iteration.
  *
  * n_layers:
- *   hány bevonási iteráció fusson le.
+ *   how many coating iterations to run.
  *
  * next_atom_ser / next_res_ser:
- *   külső számlálók, hogy folyamatosan egyedi sorszámot adjunk.
+ *   external counters so that we keep assigning unique serial numbers.
  *
  * chain_id:
- *   pl. 'W' vagy 'A' – ide kerül a HOH lánc azonosítója.
+ *   e.g. 'W' or 'A' – the HOH chain identifier goes here.
  *
- * Visszatérés: összesen hány HOH oxigént adott hozzá.
+ * Returns: the total number of HOH oxygens added.
  */
 int pass_like_coating(
     ap **atoms_io,
