@@ -73,7 +73,7 @@ if [[ "$TINKER_GPU_ENABLED" == true ]]; then
     log "TINKER_GPU is set: using Tinker9-GPU commands (dynamic9)"
 else
     DYNAMIC_CMD="dynamic"
-    log "TINKER_GPU is not set: using standard Tinker CPU commands (minimize, dynamic)"
+    log "TINKER_GPU is not set: using standard Tinker CPU commands (dynamic)"
 fi
 
 SECONDS=0
