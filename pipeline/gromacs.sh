@@ -295,7 +295,7 @@ if [[ -n "${REFERENCE_PDB:-}" ]]; then
   cp ${REFERENCE_PDB} ${SYSTEM_REF_PDB}
 
   log "Making sure Reference PDB is compatible with mobywat."
-  run_step "${SCRIPT_DIR}/reference-pdb-preprocessor.py" ${SYSTEM_REF_PDB}
+  run_step "${SCRIPT_DIR}/pdb-preprocessor.py" --reference ${SYSTEM_REF_PDB}
 
 
   run_step gmx trjconv -f md.trr -s md.tpr -o pbc1.xtc -pbc whole << EOF

@@ -73,8 +73,8 @@ Global state lives in `main.c` as `g_`-prefixed variables (e.g. `g_pdb_ref`, `g_
 - **`pipeline_common.sh`** — sourced by all pipeline scripts. Provides `log()`, `run_step()`, `setup_logging()`, `normalize_input_pdb()`, `make_output_dir()`, `validate_script_dir_not_input_dir()`, `run_mm_step()`.
 - **`wdrop.sh`** — orchestrates the SHORT/LONG loop: model reduction → PDB fix (Python) → iterative wdrop + MM/MD → file collection.
 - **`gromacs.sh`** / **`tinker.sh`** — backend-specific MM+MD steps; write `next_step.pdb` on success.
-- **`target-pdb-preprocessor.py`** — fixes missing residues in X-ray PDBs (uses pdbfixer), strips existing waters.
-- **`reference-pdb-preprocessor.py`** / **`remove_unbound_water.py`** — reference PDB utilities for MobyWat validation mode.
+- **`pdb-preprocessor.py`** — fixes missing residues/atoms and nonstandard residues in X-ray PDBs (uses pdbfixer). Mode is selected by a required flag: `--target` strips all waters and heterogens (used by `wdrop.sh`); `--reference` keeps waters but removes other heterogens (used by `gromacs.sh`/`tinker.sh` for MobyWat validation).
+- **`remove_unbound_water.py`** — reference PDB utility for MobyWat validation mode.
 
 The pipeline auto-creates `.venv` in the repo root if absent, activates it, and uses it for all Python calls. All shell scripts use `set -euo pipefail`.
 
