@@ -177,11 +177,8 @@ ORIGINAL_PDB="${INPUT_DIR}/${PDB_NAME}_original.pdb"
 log "Step 0A: Creating reference PDB file: $ORIGINAL_PDB)"
 cp "$INPUT_PDB" "$ORIGINAL_PDB"
 
-log "Step 0B: removing multiple models from PDB, keeping the first one."
-run_step "$SCRIPT_DIR"/model-reducer.sh "$INPUT_PDB"
-
 # This step is handling X-ray crystallography created PDB-s, adding residues if necessary, also it removes existing waters
-log "Step 0C: X-ray PDB fix, fixing missing atoms, removing existing waters! PYTHON DEPENDENCY!"
+log "Step 0B: X-ray PDB fix, fixing missing atoms, removing existing waters, reducing to single model! PYTHON DEPENDENCY!"
 run_step "$SCRIPT_DIR/pdb-preprocessor.py" --target "$INPUT_PDB"
 
 cd "$INPUT_DIR"

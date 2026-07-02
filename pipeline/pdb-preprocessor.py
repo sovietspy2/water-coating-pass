@@ -12,6 +12,28 @@ except ImportError:
     sys.exit(0)
 
 
+def count_altloc_collapse(path):
+    """Inspect the raw input for alternate-location conformers.
+
+    PDBFixer/OpenMM keep a single conformer per atom on load, discarding the
+    other alternate locations (column 17). Returns (positions, discarded):
+    how many atom positions carried alternates, and how many alternate-location
+    atoms will be dropped by collapsing each to one conformer. The discarded
+    count is independent of which conformer is kept.
+    """
+    groups = {}
+    with open(path) as fh:
+        for line in fh:
+            if line.startswith(("ATOM  ", "HETATM")) and line[16] != " ":
+                # Group by atom identity, ignoring resName so point-mutation
+                # alternates at the same position still group together.
+                key = (line[21], line[22:26], line[26], line[12:16])
+                groups.setdefault(key, set()).add(line[16])
+    positions = sum(1 for locs in groups.values() if len(locs) > 1)
+    discarded = sum(len(locs) - 1 for locs in groups.values())
+    return positions, discarded
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Fix a PDB file (missing residues/atoms, nonstandard residues) in place."
@@ -51,6 +73,8 @@ def main():
     )
     os.close(fd)
 
+    alt_positions, alt_discarded = count_altloc_collapse(input_pdb)
+
     print(f"[INFO] Mode      : {'reference' if keep_water else 'target'}")
     print(f"[INFO] Input PDB : {input_pdb}")
     print(f"[INFO] TMP file  : {tmp_path}")
@@ -89,6 +113,10 @@ def main():
         else:
             print("[DONE] Waters and other heterogens removed.")
         print("[DONE] Missing heavy atoms and internal residues repaired where possible.")
+        if alt_discarded:
+            print(f"[DONE] Alternate conformers collapsed to a single conformer: "
+                  f"kept 1 at each of {alt_positions} atom position(s), "
+                  f"discarded {alt_discarded} alternate-location atom(s).")
         print(f"[DONE] Replaced original PDB with fixed version: {input_pdb}")
 
     except Exception:
