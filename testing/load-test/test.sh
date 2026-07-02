@@ -16,7 +16,7 @@ set -euo pipefail
 #   -n, --num-tests NUM        Number of test iterations to run (default: 10)
 #   -p, --path PATH            Base path for test directories (default: ./test_runs)
 #   -m, --mode MODE            Mode to test: tinker, gromacs, or all (default: all)
-#   -t, --type TYPE            Type to test: SHORT, LONG, or all (default: all)
+#   -t, --type TYPE            Type to test: iteration count 1, 5, or all (default: all)
 #   -l, --loop                 Run each mode/type combination sequentially in an
 #                              infinite loop until stopped
 #   -h, --help                 Show this help message
@@ -24,7 +24,7 @@ set -euo pipefail
 # Examples:
 #   ./test.sh -u http://files.rcsb.org/download/1PSV.pdb -n 5 -p /tmp/tests -m all -t all
 #   ./test.sh -u http://files.rcsb.org/download/1PSV.pdb -r http://files.rcsb.org/download/2PTC.pdb
-#   ./test.sh -l -m gromacs -t SHORT
+#   ./test.sh -l -m gromacs -t 1
 #
 ################################################################################
 
@@ -38,7 +38,7 @@ REFERENCE_PDB_URL=""
 NUM_TESTS=10
 TEST_BASE_PATH="./test_runs"
 TEST_MODES=("tinker" "gromacs")
-TEST_TYPES=("SHORT" "LONG")
+TEST_TYPES=("1" "5")
 LOOP_MODE=false
 
 TEST_START_TIME=$(date +%s)
@@ -68,7 +68,7 @@ Options:
                              (default: ./test_runs)
   -m, --mode MODE            Mode to test: tinker, gromacs, or all
                              (default: all)
-  -t, --type TYPE            Type to test: SHORT, LONG, or all
+  -t, --type TYPE            Type to test: iteration count 1, 5, or all
                              (default: all)
   -l, --loop                 Run each mode/type combination sequentially in an
                              infinite loop until stopped
@@ -81,8 +81,8 @@ Examples:
   # Run 5 tests with gromacs mode only
   ./test.sh -n 5 -m gromacs
 
-  # Run SHORT tests only in /tmp/test_dir
-  ./test.sh -p /tmp/test_dir -t SHORT
+  # Run single-cycle (1 iteration) tests only in /tmp/test_dir
+  ./test.sh -p /tmp/test_dir -t 1
 
   # Run with an optional reference PDB
   ./test.sh -u http://files.rcsb.org/download/1PSV.pdb \
@@ -93,7 +93,7 @@ Examples:
 
 Notes:
   Standard mode:
-    With -n 2 -t SHORT:
+    With -n 2 -t 1:
       - 2 tests × 2 modes (tinker, gromacs) = 4 total test runs
       - Tests run one after another
       - Each will create a separate folder with its own PDB download
@@ -198,7 +198,7 @@ parse_arguments() {
         ;;
       -t|--type)
         if [[ "$2" == "all" ]]; then
-          TEST_TYPES=("SHORT" "LONG")
+          TEST_TYPES=("1" "5")
         else
           TEST_TYPES=("$2")
         fi
@@ -299,7 +299,7 @@ run_single_test_body() {
   local test_start
   test_start=$(date +%s)
 
-  local cmd=("$SCRIPT" "$pdb_file" "$mode" "$test_type")
+  local cmd=("$SCRIPT" "$pdb_file" "$mode" "--iterations" "$test_type")
   if [[ -n "$REFERENCE_PDB_URL" ]]; then
     cmd+=("$reference_pdb_file")
   fi

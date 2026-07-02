@@ -26,13 +26,15 @@ Output is written as `<input_base>_<N>WAT.pdb` in the same directory as the inpu
 ## Running the full pipeline
 
 ```bash
-./pipeline/wdrop.sh <INPUT_PDB> <MODE> <RUN_TYPE> [REFERENCE_PDB]
+./pipeline/wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L]
 # MODE: gromacs | tinker
-# RUN_TYPE: SHORT | LONG
+# --iterations N: number of deposit+minimize cycles (default 1)
+# --layers L: total water layers across the run (default 5); each cycle deposits L/N
 ```
 
-- `SHORT`: one wdrop run (5 layers), one MM+MD step → output directory `<base>5x1/`
-- `LONG`: 5 iterative cycles (1 layer each), feeding each minimized output into the next cycle → output directory `<base>5x5/{1..5}/`
+- Default (`--iterations 1`, `--layers 5`): all 5 layers in one wdrop run + one MM+MD step → output directory `<base>_i1_l5/`
+- `--iterations 5`: 5 iterative cycles (1 layer each), feeding each minimized output into the next; only the final cycle runs MD + MobyWat → output directory `<base>_i5_l5/{1..5}/`
+- `--layers` must be an exact multiple of `--iterations` (per-cycle layers = `L / N`).
 
 The input PDB **must be in its own working directory** outside the project folder.
 
@@ -41,7 +43,7 @@ The input PDB **must be in its own working directory** outside the project folde
 ```bash
 # Full integration test (downloads a real PDB from RCSB, runs wdrop.sh):
 ./testing/test.sh [OPTIONS]
-# -m gromacs|tinker|all   -t SHORT|LONG|all   -n <count>   -l (loop forever)
+# -m gromacs|tinker|all   -t 1|5|all   -n <count>   -l (loop forever)
 
 # Determinism test (verifies the C program output is bit-identical across N runs):
 ./testing/pass_deterministic_test.sh [-n <runs>]
@@ -71,7 +73,7 @@ Global state lives in `main.c` as `g_`-prefixed variables (e.g. `g_pdb_ref`, `g_
 ### Pipeline scripts (`pipeline/`)
 
 - **`pipeline_common.sh`** — sourced by all pipeline scripts. Provides `log()`, `run_step()`, `setup_logging()`, `normalize_input_pdb()`, `make_output_dir()`, `validate_script_dir_not_input_dir()`, `run_mm_step()`.
-- **`wdrop.sh`** — orchestrates the SHORT/LONG loop: model reduction → PDB fix (Python) → iterative wdrop + MM/MD → file collection.
+- **`wdrop.sh`** — orchestrates the `--iterations` deposit+minimize loop: model reduction → PDB fix (Python) → iterative wdrop + MM/MD → file collection.
 - **`gromacs.sh`** / **`tinker.sh`** — backend-specific MM+MD steps; write `next_step.pdb` on success.
 - **`pdb-preprocessor.py`** — fixes missing residues/atoms and nonstandard residues in X-ray PDBs (uses pdbfixer). Mode is selected by a required flag: `--target` strips all waters and heterogens (used by `wdrop.sh`); `--reference` keeps waters but removes other heterogens (used by `gromacs.sh`/`tinker.sh` for MobyWat validation).
 - **`remove_unbound_water.py`** — reference PDB utility for MobyWat validation mode.

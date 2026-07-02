@@ -138,9 +138,15 @@ run_step minimize "${INPUT_DIR}/${PDB_NAME}.xyz" -k "${INPUT_DIR}/minimize.key" 
 0.01
 EOF
 
-log "Generated md.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0"
-# Append dynamics-specific settings after minimization completes.
-cat >> "${INPUT_DIR}/md.key" <<EOF
+# 6) Dynamics + final structure — only when MobyWat output is enabled.
+# When disabled we skip dynamics entirely and take the minimized structure (.xyz_2) as the
+# final frame (used by the intermediate cycles of a multi-iteration run: wdrop + minimize only).
+ARC_FILE="${INPUT_DIR}/${PDB_NAME}.arc"
+FINAL_XYZ=""
+
+if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
+  # Append dynamics-specific settings after minimization completes.
+  cat >> "${INPUT_DIR}/md.key" <<EOF
 PARAMETERS amber99.prm
 RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0
 
@@ -148,29 +154,22 @@ RATTLE
 vdw-cutoff 9.0
 chg-cutoff 9.0
 EOF
-
-if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
   echo "ARCHIVE" >> "${INPUT_DIR}/md.key"
-  log "Trajectory mode enabled: ARCHIVE written to md.key"
-else
-  echo "NO-ARCHIVE" >> "${INPUT_DIR}/md.key"
-  log "Fast mode enabled: NO-ARCHIVE written to md.key"
-fi
+  log "Generated md.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0 (trajectory mode: ARCHIVE)"
 
-# Tinker9-GPU: two extra key settings required for GPU execution.
-# 1) Beeman integrator (CPU default) is not implemented in Tinker9-GPU — use velocity Verlet.
-# 2) REMOVE-INERTIA 0: disables angular-momentum removal (mdrestRemoveAngularMomentum_cu is
-#    unimplemented for non-PBC systems in Tinker9-GPU — harmless to skip for short runs).
-if [[ "$TINKER_GPU_ENABLED" == true ]]; then
-  printf 'INTEGRATOR VERLET\nREMOVE-INERTIA 0\n' >> "${INPUT_DIR}/md.key"
-  log "TINKER_GPU: added INTEGRATOR VERLET + REMOVE-INERTIA 0 to md.key"
-fi
+  # Tinker9-GPU: two extra key settings required for GPU execution.
+  # 1) Beeman integrator (CPU default) is not implemented in Tinker9-GPU — use velocity Verlet.
+  # 2) REMOVE-INERTIA 0: disables angular-momentum removal (mdrestRemoveAngularMomentum_cu is
+  #    unimplemented for non-PBC systems in Tinker9-GPU — harmless to skip for short runs).
+  if [[ "$TINKER_GPU_ENABLED" == true ]]; then
+    printf 'INTEGRATOR VERLET\nREMOVE-INERTIA 0\n' >> "${INPUT_DIR}/md.key"
+    log "TINKER_GPU: added INTEGRATOR VERLET + REMOVE-INERTIA 0 to md.key"
+  fi
 
-# 6) Dynamics setup
-N_STEPS="$(ns_to_steps "$MD_DURATION" "$DT_FS")"
-TOTAL_TIME_PS="$(ns_to_ps "$MD_DURATION")"
+  # Dynamics setup
+  N_STEPS="$(ns_to_steps "$MD_DURATION" "$DT_FS")"
+  TOTAL_TIME_PS="$(ns_to_ps "$MD_DURATION")"
 
-if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
   SAVE_EVERY_STEPS=$(( N_STEPS / TARGET_FRAMES ))
   if (( SAVE_EVERY_STEPS < 1 )); then
     SAVE_EVERY_STEPS=1
@@ -180,21 +179,16 @@ if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
   SAVE_INTERVAL_PS="$(awk -v STEPS="$SAVE_EVERY_STEPS" -v DT="$DT_FS" 'BEGIN {
     printf "%.6f\n", (STEPS * DT) / 1000.0
   }')"
-else
-  SAVE_EVERY_STEPS="$N_STEPS"
-  ACTUAL_FRAMES=1
-  SAVE_INTERVAL_PS="$TOTAL_TIME_PS"
-fi
 
-log "Step 6: Running dynamic (molecular dynamics simulation)"
-log "MD_DURATION=$MD_DURATION ns"
-log "TOTAL_TIME_PS=$TOTAL_TIME_PS ps"
-log "N_STEPS=$N_STEPS"
-log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
-log "SAVE_INTERVAL_PS=$SAVE_INTERVAL_PS ps"
-log "Expected saved frames ~= $ACTUAL_FRAMES"
+  log "Step 6: Running dynamic (molecular dynamics simulation)"
+  log "MD_DURATION=$MD_DURATION ns"
+  log "TOTAL_TIME_PS=$TOTAL_TIME_PS ps"
+  log "N_STEPS=$N_STEPS"
+  log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
+  log "SAVE_INTERVAL_PS=$SAVE_INTERVAL_PS ps"
+  log "Expected saved frames ~= $ACTUAL_FRAMES"
 
-run_step "$DYNAMIC_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "${INPUT_DIR}/md.key" <<EOF
+  run_step "$DYNAMIC_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "${INPUT_DIR}/md.key" <<EOF
 ${N_STEPS}
 ${DT_FS}
 ${SAVE_INTERVAL_PS}
@@ -202,11 +196,7 @@ ${SAVE_INTERVAL_PS}
 300
 EOF
 
-# 7) Choose final structure source
-ARC_FILE="${INPUT_DIR}/${PDB_NAME}.arc"
-FINAL_XYZ=""
-
-if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
+  # 7) Choose final structure source: last frame of the trajectory
   if [[ ! -f "$ARC_FILE" ]]; then
     log "ERROR: ARC file not found: $ARC_FILE"
     exit 1
@@ -234,16 +224,14 @@ EOF
     exit 1
   fi
 else
-  # In fast mode, dynamic updates the input coordinates; use the latest XYZ directly.
-  if [[ -f "${INPUT_DIR}/${PDB_NAME}.xyz_2" ]]; then
-    FINAL_XYZ="${INPUT_DIR}/${PDB_NAME}.xyz_2"
-  elif [[ -f "${INPUT_DIR}/${PDB_NAME}.xyz" ]]; then
-    FINAL_XYZ="${INPUT_DIR}/${PDB_NAME}.xyz"
-  else
-    log "ERROR: No final XYZ file found after dynamics"
+  # MD disabled: the minimized structure (.xyz_2, written by minimize) is the final frame.
+  log "Step 6: MD disabled (MobyWat output off); using minimized structure as final frame"
+  FINAL_XYZ="${INPUT_DIR}/${PDB_NAME}.xyz_2"
+  if [[ ! -f "$FINAL_XYZ" ]]; then
+    log "ERROR: minimized XYZ not found: $FINAL_XYZ"
     exit 1
   fi
-  log "Fast mode final XYZ selected: ${FINAL_XYZ}"
+  log "Final XYZ selected: ${FINAL_XYZ}"
 fi
 
 # 8) XYZ -> PDB for final structure

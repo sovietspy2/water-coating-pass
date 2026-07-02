@@ -209,45 +209,38 @@ run_step gmx grompp -v -f "$INPUT_DIR/gromacs-cg.mdp" -c after_em.gro -r after_e
 log "Step 4b: Running mdrun for conjugate gradient"
 run_step gmx mdrun -v -s cg -o cg.trr -c after_cg.gro -g cg.log
 
-# --- 5. MOLECULAR DYNAMICS ---
-N_STEPS="$(ns_to_nsteps "$MD_DURATION" "$DT_PS")"
-TOTAL_TIME_PS="$(ns_to_ps "$MD_DURATION")"
-
+# --- 5 & 6. MOLECULAR DYNAMICS + FINAL FRAME ---
+# MD (and the MobyWat trajectory it feeds) only runs when MobyWat output is enabled.
+# When it is disabled we skip MD entirely and take the CG-minimized structure as the
+# final frame (used by the intermediate cycles of a multi-iteration run: wdrop + minimize only).
 if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
-    SAVE_EVERY_STEPS=$(( N_STEPS / TARGET_FRAMES ))
-    if (( SAVE_EVERY_STEPS < 1 )); then
-        SAVE_EVERY_STEPS=1
-    fi
+  N_STEPS="$(ns_to_nsteps "$MD_DURATION" "$DT_PS")"
+  TOTAL_TIME_PS="$(ns_to_ps "$MD_DURATION")"
 
-    ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
-    SAVE_INTERVAL_PS="$(steps_to_ps "$SAVE_EVERY_STEPS" "$DT_PS")"
-else
-    SAVE_EVERY_STEPS=0
-    ACTUAL_FRAMES=0
-    SAVE_INTERVAL_PS="0.000000"
-fi
+  SAVE_EVERY_STEPS=$(( N_STEPS / TARGET_FRAMES ))
+  if (( SAVE_EVERY_STEPS < 1 )); then
+      SAVE_EVERY_STEPS=1
+  fi
 
-log "Step 5: Running molecular dynamics"
-log "MD_DURATION=$MD_DURATION ns"
-log "TOTAL_TIME_PS=$TOTAL_TIME_PS ps"
-log "N_STEPS=$N_STEPS"
-log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
-log "SAVE_INTERVAL_PS=$SAVE_INTERVAL_PS ps"
-log "Expected saved frames ~= $ACTUAL_FRAMES"
-log "Creating parameter file: gromacs-md.mdp"
-write_md_mdp "$N_STEPS" "$SAVE_EVERY_STEPS" "$DT_PS"
-log "Step 5a: Running grompp for molecular dynamics (using gromacs-md.mdp)"
-run_step gmx grompp -f "$INPUT_DIR/gromacs-md.mdp" -o md -c after_cg.gro -r after_cg.gro -p topol.top -maxwarn 1
+  ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
+  SAVE_INTERVAL_PS="$(steps_to_ps "$SAVE_EVERY_STEPS" "$DT_PS")"
 
-log "Step 5b: Running mdrun for molecular dynamics"
-if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
+  log "Step 5: Running molecular dynamics"
+  log "MD_DURATION=$MD_DURATION ns"
+  log "TOTAL_TIME_PS=$TOTAL_TIME_PS ps"
+  log "N_STEPS=$N_STEPS"
+  log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
+  log "SAVE_INTERVAL_PS=$SAVE_INTERVAL_PS ps"
+  log "Expected saved frames ~= $ACTUAL_FRAMES"
+  log "Creating parameter file: gromacs-md.mdp"
+  write_md_mdp "$N_STEPS" "$SAVE_EVERY_STEPS" "$DT_PS"
+  log "Step 5a: Running grompp for molecular dynamics (using gromacs-md.mdp)"
+  run_step gmx grompp -f "$INPUT_DIR/gromacs-md.mdp" -o md -c after_cg.gro -r after_cg.gro -p topol.top -maxwarn 1
+
+  log "Step 5b: Running mdrun for molecular dynamics"
   run_step gmx mdrun -v -s md -o md.trr -c after_md.gro -g md.log
-else
-  run_step gmx mdrun -v -s md -c after_md.gro -g md.log
-fi
 
-# --- 6. POST-PROCESSING (Cleaning up the trajectory) ---
-if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
+  # --- 6. POST-PROCESSING (Cleaning up the trajectory) ---
   log "Step 6a: Running trjconv for PBC correction (pbc whole)"
   run_step gmx trjconv -f md.trr -s md.tpr -o pbc_whole.xtc -pbc whole <<EOF
 0
@@ -265,8 +258,8 @@ EOF
 0
 EOF
 else
-  log "Step 6: Creating final frame PDB file"
-  run_step gmx editconf -f after_md.gro -o lastframe_drop.pdb
+  log "Step 5-6: MD disabled (MobyWat output off); using CG-minimized structure as final frame"
+  run_step gmx editconf -f after_cg.gro -o lastframe_drop.pdb
 fi
 
 # input: lastframe_drop.pdb output: next_step.pdb
