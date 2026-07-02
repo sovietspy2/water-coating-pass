@@ -181,7 +181,7 @@ readonly ITERATIONS LAYERS
 readonly WATERS_LAYERS_PER_RUN=$(( LAYERS / ITERATIONS ))
 readonly OUTPUT_TAG="_i${ITERATIONS}_l${LAYERS}"
 # MD + MobyWat run only on the final cycle, so a single MD duration is needed.
-readonly FINAL_MD_DURATION="0.001" # in ns
+readonly FINAL_MD_DURATION="0.1" # in ns
 
 setup_logging "$LOGFILE"
 
