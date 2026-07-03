@@ -194,10 +194,10 @@ log "INPUT_DIR=$INPUT_DIR"
 log "REFERENCE_PDB(optional)=$REFERENCE_PDB"
 validate_script_dir_not_input_dir "$1"
 
-# The script is going to change the input PDB, we are making a reference file from the original input for MobyWat validation purposes
+# Step 0B (pdb-preprocessor --target) rewrites the input PDB in place
 PDB_NAME="$(basename "$INPUT_PDB" .pdb)"
 ORIGINAL_PDB="${INPUT_DIR}/${PDB_NAME}_original.pdb"
-log "Step 0A: Creating reference PDB file: $ORIGINAL_PDB)"
+log "Step 0A: Backing up untouched input PDB to: $ORIGINAL_PDB"
 cp "$INPUT_PDB" "$ORIGINAL_PDB"
 
 # This step is handling X-ray crystallography created PDB-s, adding residues if necessary, also it removes existing waters
@@ -252,10 +252,10 @@ for ((I = 1; I <= ITERATIONS; I++)); do
   require_file "$RUN_DIR/$(basename "$LAST_MM_OUT")" "moved MM result"
 
   if (( I < ITERATIONS )); then
-    cp -f -- "$RUN_DIR/$(basename "$LAST_MM_OUT")" .
-    log "Copied next input back into working dir: $(basename "$LAST_MM_OUT")"
-    CURRENT_IN="$(basename "$LAST_MM_OUT")"
-    log "Next iteration input set to: $CURRENT_IN"
+    NEXT_IN="cycle_input.pdb"
+    cp -f -- "$RUN_DIR/$(basename "$LAST_MM_OUT")" "./$NEXT_IN"
+    CURRENT_IN="$NEXT_IN"
+    log "Next iteration input set to: $CURRENT_IN (copied from $(basename "$LAST_MM_OUT"))"
   fi
 done
 

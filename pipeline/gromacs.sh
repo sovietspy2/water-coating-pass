@@ -181,7 +181,7 @@ cd "$INPUT_DIR"
 log "Changed working directory to: $INPUT_DIR"
 
 log "Step 0: Reformatting PDB"
-run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_PDB"
+run_step "$SCRIPT_DIR"/format_pdb.py "$INPUT_PDB"
 
 # --- 1. SETUP ---
 log "Step 1: Running pdb2gmx (generate topology and initial structure)"
@@ -254,21 +254,16 @@ EOF
 
   log "Step 6c: Creating final frame PDB file"
   END_PS="$TOTAL_TIME_PS" # We need this because we introduced time params
-  run_step gmx trjconv -f system_compact.xtc -s md.tpr -o lastframe_drop.pdb -b "$END_PS" -e "$END_PS" <<EOF
+  run_step gmx trjconv -f system_compact.xtc -s md.tpr -o next_step.pdb -b "$END_PS" -e "$END_PS" <<EOF
 0
 EOF
 else
   log "Step 5-6: MD disabled (MobyWat output off); using CG-minimized structure as final frame"
-  run_step gmx editconf -f after_cg.gro -o lastframe_drop.pdb
+  run_step gmx editconf -f after_cg.gro -o next_step.pdb
 fi
 
-# input: lastframe_drop.pdb output: next_step.pdb
-# Removing waters too far away from protein
-log "Step 7: Removing extra waters not connected to protein"
-run_step python3 "$SCRIPT_DIR/remove_unbound_water.py" "$INPUT_DIR/lastframe_drop.pdb" "next_step.pdb"
-
-log "Step 8: Post processing PDB"
-run_step "$SCRIPT_DIR"/format-pdb.sh "$INPUT_DIR/next_step.pdb"
+log "Step 7: Post processing PDB"
+run_step "$SCRIPT_DIR"/format_pdb.py "$INPUT_DIR/next_step.pdb"
 
 if [[ "$MOBYWAT_OUTPUT_ENABLED" != "true" ]]; then
   log "MobyWat output disabled; skipping trajectory PDB generation"
@@ -281,7 +276,7 @@ fi
 #cp after_md.gro mobywat_input.gro
 
 
-log "Step 9: Running mobywat"
+log "Step 8: Running mobywat"
 if [[ -n "${REFERENCE_PDB:-}" ]]; then
 
   SYSTEM_REF_PDB="system_ref.pdb"

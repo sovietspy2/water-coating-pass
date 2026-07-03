@@ -8,5 +8,5 @@ wget http://files.rcsb.org/download/1R6J.pdb
 
 cp 1R6J.pdb 1R6J_r.pdb
 
-../../../pipeline/wdrop.sh 1R6J.pdb gromacs 1R6J_r.pdb
+../../../pipeline/wdrop.sh 1R6J.pdb gromacs --iterations 5 --layers 5 1R6J_r.pdb
 

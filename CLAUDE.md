@@ -76,7 +76,7 @@ Global state lives in `main.c` as `g_`-prefixed variables (e.g. `g_pdb_ref`, `g_
 - **`wdrop.sh`** — orchestrates the `--iterations` deposit+minimize loop: model reduction → PDB fix (Python) → iterative wdrop + MM/MD → file collection.
 - **`gromacs.sh`** / **`tinker.sh`** — backend-specific MM+MD steps; write `next_step.pdb` on success.
 - **`pdb-preprocessor.py`** — fixes missing residues/atoms and nonstandard residues in X-ray PDBs (uses pdbfixer). Mode is selected by a required flag: `--target` strips all waters and heterogens (used by `wdrop.sh`); `--reference` keeps waters but removes other heterogens (used by `gromacs.sh`/`tinker.sh` for MobyWat validation).
-- **`remove_unbound_water.py`** — reference PDB utility for MobyWat validation mode.
+- **`format_pdb.py`** — rewrites a PDB into canonical fixed-width columns (removes CONECT, renames OW→O, maps residue names 001/002/SOL→WAT), backing the original up to `<stem>.original.pdb`. Called by both backends before/after MD. Its coordinate parser anchors decimals to exactly 3 fractional digits (`%8.3f`), so it correctly reads touching fixed-width fields (GROMACS pseudo-PBC coords ~5000 Å) and widened/stuck fields (Tinker `xyzpdb` `%9.3f` frames) alike. Tests in `testing/format-pdb-test/`.
 
 The pipeline auto-creates `.venv` in the repo root if absent, activates it, and uses it for all Python calls. All shell scripts use `set -euo pipefail`.
 

@@ -90,7 +90,7 @@ log "Created TINKER.protocol file"
 
 # 1) PDB pre-formatting
 log "Step 1: Changing pdb format to fit tinker requirements"
-run_step "$SCRIPT_DIR/format-pdb.sh" "$INPUT_PDB"
+run_step "$SCRIPT_DIR/format_pdb.py" "$INPUT_PDB"
 
 # 2) Parameter file
 log "Step 2: Copying amber99.prm to input directory"
@@ -105,12 +105,6 @@ amber99.prm
 EOF
 log "Generated XYZ file: ${INPUT_DIR}/${PDB_NAME}.xyz"
 
-# 4) Build key file before minimize so protein is restrained during minimization.
-#    We use the NEGATIVE RANGE form of RESTRAIN-POSITION (-first last k) so that
-#    Tinker uses XYZ atom indices (not PDB serial numbers) and takes reference
-#    coordinates directly from the XYZ file at startup.  This avoids the
-#    PDB-serial ↔ XYZ-index mismatch that arises because pdbxyz inserts hydrogen
-#    atoms between heavy atoms, offsetting all subsequent serial numbers.
 log "Step 4: Building key file with protein restraints (before minimization)"
 
 # Count protein atoms: all XYZ atoms before the first water (OW/HW).
@@ -271,10 +265,11 @@ log "Step 11: Reformatting PDB file"
 MOBYWAT_INPUT_PDB="system_mdl.pdb"
 cp -f -- "${INPUT_DIR}/${PDB_NAME}.pdb_3" "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}"
 
-run_step "$SCRIPT_DIR/format-pdb.sh" "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}"
+run_step "$SCRIPT_DIR/format_pdb.py" "${INPUT_DIR}/${MOBYWAT_INPUT_PDB}"
 log "${INPUT_DIR}/${MOBYWAT_INPUT_PDB} is ready to be processed by MobyWat!"
 
 log "Step 12: Running mobywat!"
+MOBYWAT_ARGS=(-f "${MOBYWAT_INPUT_PDB}") #list of params to mobywat
 if [[ -n "${REFERENCE_PDB:-}" ]]; then
   log "REFERENCE_PDB is present and non-empty: $REFERENCE_PDB, VALIDATION MODE!"
 
@@ -291,11 +286,14 @@ if [[ -n "${REFERENCE_PDB:-}" ]]; then
   log "Remove TER operator ID if present from ${SYSTEM_REF_PDB}"
   run_step "${SCRIPT_DIR}"/remove-ter-id.sh ${SYSTEM_REF_PDB}
 
+  # Only pass a reference in validation mode.
+  MOBYWAT_ARGS+=(-r "${SYSTEM_REF_PDB}")
+
   log "Running mobywat validation"
 else
   log "REFERENCE_PDB is missing or empty, PREDICTION MODE!"
 fi
 
-run_step mobywat -f ${MOBYWAT_INPUT_PDB} -r ${SYSTEM_REF_PDB} -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
+run_step mobywat "${MOBYWAT_ARGS[@]}" -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
 
 log "tinker.sh completed successfully"
