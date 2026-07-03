@@ -88,6 +88,26 @@ function atom_field(name,    n) {
   return pad_right(name, 4)
 }
 
+function parse_coords(tail, out,    n, val) {
+  # Robustly pull x, y, z from the coordinate region of an ATOM/HETATM line.
+  # Tinker xyzpdb widens the coordinate field (f8.3 -> f9.3) for any frame
+  # that contains an atom >= 100 A from the origin (e.g. a water that has
+  # evaporated out of the boxless droplet), which shifts every fixed column.
+  # Extracting the first three decimal numbers -- rather than reading fixed
+  # bytes 31-38 / 39-46 / 47-54 -- recovers the true coordinates regardless of
+  # field width, and also copes with stuck-together negative values.
+  delete out
+  n = 0
+  while (match(tail, /[-+]?[0-9]+\.[0-9]+/)) {
+    val = substr(tail, RSTART, RLENGTH)
+    tail = substr(tail, RSTART + RLENGTH)
+    n++
+    out[n] = val
+    if (n >= 3) break
+  }
+  return n
+}
+
 function log_change(kind, input_line, atom_serial, msg, before, after) {
   print "[" kind "] input_line=" input_line ", atom_serial=" atom_serial ": " msg >> log_file
   if (before != "") print "  before: " before >> log_file
@@ -131,12 +151,32 @@ BEGIN {
   old_chain = substr($0, 22, 1)
   old_resseq = substr($0, 23, 4)
   old_icode = substr($0, 27, 1)
-  old_x = substr($0, 31, 8)
-  old_y = substr($0, 39, 8)
-  old_z = substr($0, 47, 8)
-  old_occ = substr($0, 55, 6)
-  old_temp = substr($0, 61, 6)
-  old_tail = (length($0) >= 67 ? substr($0, 67) : "")
+  if (parse_coords(substr($0, 31), coord_fields) >= 3) {
+    old_x = coord_fields[1]
+    old_y = coord_fields[2]
+    old_z = coord_fields[3]
+    # A standard-width line has z in the canonical columns 47-54; if the
+    # fixed-column z matches the parsed z, the occupancy/tempFactor/tail
+    # columns are trustworthy too. On a widened (shifted) Tinker frame they
+    # are not -- and such frames carry no occ/temp/tail -- so blank them out
+    # rather than copying shifted bytes.
+    if (trim(substr($0, 47, 8)) == old_z) {
+      old_occ = substr($0, 55, 6)
+      old_temp = substr($0, 61, 6)
+      old_tail = (length($0) >= 67 ? substr($0, 67) : "")
+    } else {
+      old_occ = ""
+      old_temp = ""
+      old_tail = ""
+    }
+  } else {
+    old_x = substr($0, 31, 8)
+    old_y = substr($0, 39, 8)
+    old_z = substr($0, 47, 8)
+    old_occ = substr($0, 55, 6)
+    old_temp = substr($0, 61, 6)
+    old_tail = (length($0) >= 67 ? substr($0, 67) : "")
+  }
 
   new_record = old_record
   new_atom_trim = trim(old_atom)
