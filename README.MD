@@ -1,5 +1,42 @@
 # WDROP - Water Droplet-based Molecular Dynamics Pipeline via MobyWat
 
+## Software components
+
+The pipeline ties together a C binary, Bash orchestration, a Python virtual
+environment, and external MM/MD engines. Every box below must be available:
+
+```text
+   wdrop.sh   (Bash orchestrator; sources pipeline_common.sh)
+      |
+      |   loops N cycles:   deposit water  -->  minimize
+      |   the final cycle additionally runs   MD  -->  MobyWat
+      |
+      +-- [1] preprocess ----> pdb-preprocessor.py ----> Python venv (.venv) + pdbfixer
+      |
+      +-- [2] place water ---> wdrop (C binary)   <---- built with: C compiler + make
+      |
+      +-- [3] minimize / MD --> (MODE selects one backend)
+      |          gromacs ---> gromacs.sh ---> GROMACS (gmx)
+      |          tinker  ---> tinker.sh  ---> Tinker CPU (minimize, dynamic,
+      |                                                   pdbxyz, xyzpdb, arcedit)
+      |                                   \
+      |                                    `--> Tinker9-GPU (dynamic9)  [optional, TINKER_GPU=1]
+      |
+      +-- [4] validate ------> mobywat   (runs on the final cycle)
+```
+
+| Component | Role | Provided by |
+| --- | --- | --- |
+| `wdrop.sh` + `pipeline_common.sh` | Pipeline orchestration (Bash) | this repo (`pipeline/`) |
+| `wdrop` | Places HOH water layers on the protein surface | this repo (`src/`, C binary) |
+| C compiler + `make` | Builds the `wdrop` binary | system toolchain |
+| `pdb-preprocessor.py` | Fixes/reduces the input PDB | this repo, needs Python venv |
+| Python venv (`.venv`) + `pdbfixer` | PDB fixing dependency | auto-created by the pipeline |
+| GROMACS (`gmx`) | MM + MD backend (`MODE=gromacs`) | external install |
+| Tinker (`minimize`, `dynamic`, `pdbxyz`, `xyzpdb`, `arcedit`) | MM + MD backend (`MODE=tinker`) | external install |
+| Tinker9-GPU (`dynamic9`) | GPU-accelerated MD (optional, `TINKER_GPU=1`) | external install |
+| `mobywat` | Water prediction/validation on the final cycle | external install |
+
 ## Compile
 - `cd src` and then `make`
 
@@ -12,22 +49,29 @@ The project includes user-facing pipeline script in `pipeline/`:
 
 # wdrop.sh
 
-`wdrop.sh` is a Bash pipeline wrapper for running `wdrop` and molecular mechanics minimization on a PDB file. It supports two execution modes: a single short run or a five-step iterative long run.
+`wdrop.sh` is a Bash pipeline wrapper for running `wdrop` and molecular mechanics minimization on a PDB file. It deposits water layers around the protein and relaxes the structure over one or more deposit-and-minimize cycles, controlled by the `--iterations` and `--layers` flags.
 
 ## Usage
 
 ```bash
-./wdrop.sh <INPUT_PDB> <MODE> <RUN_TYPE> <REFERENCE_PDB(optional)>
+./wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L]
 ```
 
 Examples:
 
 ```bash
-./wdrop.sh /tmp/working_dir/1PSV.pdb gromacs LONG
+# Default: 5 water layers deposited in a single cycle
+./wdrop.sh /tmp/working_dir/1PSV.pdb gromacs
 ```
 
 ```bash
-./wdrop.sh /tmp/working_dir/1PSV.pdb gromacs LONG /tmp/working_dir/1PSV_cryst.pdb
+# 5 iterative cycles (1 layer per cycle)
+./wdrop.sh /tmp/working_dir/1PSV.pdb gromacs --iterations 5
+```
+
+```bash
+# Validation mode with a reference PDB (waters already present)
+./wdrop.sh /tmp/working_dir/1PSV.pdb gromacs /tmp/working_dir/1PSV_cryst.pdb --iterations 5
 ```
 
 Note: Place the input PDB in its own working directory located outside the project folder. The working directory should contain only that PDB file.
@@ -35,34 +79,35 @@ Note: Place the input PDB in its own working directory located outside the proje
 
 - `INPUT_PDB` — Absolute or relative path to an input `.pdb` file.
 - `MODE` — Minimization backend, either `gromacs` or `tinker`.
-- `RUN_TYPE` — Pipeline mode, either `SHORT` or `LONG`.
-- `REFERENCE_PDB` — Absolute or relative path to the `.pdb` file that can be used for reference structure, as it has waters already.
+- `REFERENCE_PDB` — Absolute or relative path to a `.pdb` file used as the reference structure (it already contains waters), enabling MobyWat validation mode. Optional.
+- `--iterations N` — Number of deposit+minimize cycles (default `1`).
+- `--layers L` — Total number of `wdrop` water layers deposited across the whole run (default `5`). Each cycle deposits `L / N` layers, so `L` must be an exact multiple of `N`.
 
-## Run types
+## Iterations and layers
 
-### SHORT
+Each run deposits `--layers` water layers in total, split evenly across `--iterations` deposit-and-minimize cycles (`--layers / --iterations` layers per cycle).
 
-`SHORT` performs one `wdrop` run with 5 water layers, then one MM and MD step. The generated files are collected into a single output directory named after the input file with the `5x1` suffix.
+- **Intermediate cycles** run `wdrop` followed by energy minimization only — **no MD**. Each cycle's minimized structure is stored in a numbered subdirectory and fed into the next cycle.
+- **The final cycle** runs `wdrop`, minimization, an MD simulation, and MobyWat.
 
-### LONG
+Examples:
 
-`LONG` performs 5 iterative cycles. Each cycle runs `wdrop` with 1 layer of water, then MM then MD, stores outputs in a numbered subdirectory, and uses the minimized structure as the input for the next cycle.
+- Default (`--iterations 1`, `--layers 5`): one `wdrop` run of 5 layers, then minimize + MD + MobyWat.
+- `--iterations 5` (layers default 5): 5 cycles of 1 layer each; cycles 1–4 are minimize-only, cycle 5 adds MD + MobyWat.
 
 ## Output
 
 - Log file: `application.LOG` in the input file directory.
-- `SHORT` output directory: `<input_base>5x1`
-- `LONG` output directory: `<input_base>5x5`
-- `LONG` iteration subdirectories: `<input_base>5x5/1` ... `<input_base>5x5/5`
+- Output directory: `<input_base>_i<iterations>_l<layers>` (e.g. `1PSV_i1_l5`, `1PSV_i5_l5`).
+- For multi-cycle runs (`--iterations > 1`), each cycle is stored in a numbered subdirectory: `<input_base>_i5_l5/1` ... `<input_base>_i5_l5/5`.
 
 ## Workflow
 
 1. Validate arguments and normalize the input PDB path.
-2. Remove extra PDB models, keeping only the first one.
-3. Run `wdrop`.
-4. Run minimization using the selected backend.
-5. Save and organize output files.
-6. Write progress and runtime information to `application.LOG`.
+2. Fix the input PDB (add missing atoms/residues), strip existing waters, and reduce it to a single model.
+3. For each cycle: run `wdrop` to deposit water layers, then minimize with the selected backend. The final cycle also runs MD and MobyWat.
+4. Collect and organize each cycle's output files into its run directory.
+5. Write progress and runtime information to `application.LOG`.
 
 ## Requirements
 
@@ -78,7 +123,7 @@ It also expects the `wdrop` executable to be available in `PATH`.
 ## Notes
 
 - The script uses strict Bash mode: `set -euo pipefail`.
-- `RUN_TYPE` is case-insensitive because it is internally normalized to uppercase.
+- `--iterations` and `--layers` may appear in any order, before or after the positional arguments.
 - Existing `application.LOG` is reused and appended to, not truncated.
 
 ## Exit behavior

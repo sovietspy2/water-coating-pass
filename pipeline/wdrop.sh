@@ -8,9 +8,9 @@ echo "  \ \/  \/ / | |  | |  _  /| |  | |  ___/ "
 echo "   \  /\  /  | |__| | | \ \| |__| | |     "
 echo "    \/  \/   |_____/|_|  \_\\____/|_|     "
 
-# Usage: ./wdrop.sh INPUT_PDB MODE RUN_TYPE REFERENCE_PDB
-# Example prediciton mode: ./wdrop.sh /abs/path/ASD.pdb gromacs LONG
-# Example validation mode: ./wdrop.sh /abs/path/ASD.pdb gromacs LONG /abs/path/ASD_crsyst.pdb
+# Usage: ./wdrop.sh INPUT_PDB MODE [REFERENCE_PDB] [--iterations N] [--layers L]
+# Example prediciton mode: ./wdrop.sh /abs/path/ASD.pdb gromacs --iterations 5
+# Example validation mode: ./wdrop.sh /abs/path/ASD.pdb gromacs /abs/path/ASD_crsyst.pdb --iterations 5
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
@@ -30,10 +30,11 @@ source "$VENV_DIR/bin/activate"
 SECONDS=0
 
 usage() {
-  echo "Usage: $0 <INPUT_PDB> <MODE> <RUN_TYPE> <REFERENCE_PDB_WITH_WATER>" >&2
-  echo "Input PDB: mandatory used for mobywat prediction mode"
+  echo "Usage: $0 <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L]" >&2
+  echo "Input PDB: mandatory, used for mobywat prediction mode" >&2
   echo "Modes: gromacs, tinker" >&2
-  echo "Run types: LONG, SHORT" >&2
+  echo "--iterations N: number of deposit+minimize cycles (default 1)" >&2
+  echo "--layers L: total water layers across the run (default 5); each cycle deposits L/N" >&2
   echo "Reference PDB: (optional) for mobywat validaiton mode" >&2
   exit 1
 }
@@ -121,13 +122,39 @@ on_exit() {
 trap on_error ERR
 trap on_exit EXIT
 
-[[ $# -eq 3 || $# -eq 4 ]] || usage
+# Parse --iterations/--layers flags (accepted in any position) and the
+# positionals: INPUT_PDB (1), MODE (2), REFERENCE_PDB (3, optional).
+ITERATIONS=1
+LAYERS=5
+POSITIONAL=()
+while (( $# )); do
+  case "$1" in
+    --iterations)
+      [[ $# -ge 2 ]] || { echo "Error: --iterations requires a value" >&2; usage; }
+      ITERATIONS="$2"; shift 2 ;;
+    --iterations=*) ITERATIONS="${1#*=}"; shift ;;
+    --layers)
+      [[ $# -ge 2 ]] || { echo "Error: --layers requires a value" >&2; usage; }
+      LAYERS="$2"; shift 2 ;;
+    --layers=*)     LAYERS="${1#*=}"; shift ;;
+    -h|--help)      usage ;;
+    --)             shift; while (( $# )); do POSITIONAL+=("$1"); shift; done ;;
+    -*)             echo "Error: unknown option '$1'" >&2; usage ;;
+    *)              POSITIONAL+=("$1"); shift ;;
+  esac
+done
+if (( ${#POSITIONAL[@]} > 0 )); then
+  set -- "${POSITIONAL[@]}"
+else
+  set --
+fi
+
+[[ $# -eq 2 || $# -eq 3 ]] || usage
 
 INPUT_PDB="$(normalize_input_pdb "$1")"
 readonly INPUT_PDB
 readonly MODE="$2"
-readonly RUN_TYPE="${3^^}"
-readonly REFERENCE_PDB="${4:-}"
+readonly REFERENCE_PDB="${3:-}"
 readonly INPUT_DIR="$(dirname "$INPUT_PDB")"
 readonly INPUT_FILE="$(basename "$INPUT_PDB")"
 LOGFILE="${INPUT_DIR}/application.LOG"
@@ -140,33 +167,29 @@ case "$MODE" in
     ;;
 esac
 
-case "$RUN_TYPE" in
-  LONG)
-    readonly ITERATIONS=5
-    readonly WATERS_LAYERS_PER_RUN=1
-    readonly OUTPUT_TAG="5x5"
-    readonly FINAL_MD_DURATION="0.1" #in ns
-    readonly INTERMEDIATE_MD_DURATION="0.01" # in ns
-    ;;
-  SHORT)
-    readonly ITERATIONS=1
-    readonly WATERS_LAYERS_PER_RUN=5 # used to be 5
-    readonly OUTPUT_TAG="5x1"
-    readonly FINAL_MD_DURATION="0.1" #in ns
-    readonly INTERMEDIATE_MD_DURATION="0.1" # in ns
-    ;;
-  *)
-    echo "Error: invalid RUN_TYPE '$RUN_TYPE' (expected LONG or SHORT)" >&2
-    exit 1
-    ;;
-esac
+# --iterations = number of deposit+minimize cycles; --layers = TOTAL water layers
+# across the run. Each cycle deposits LAYERS/ITERATIONS layers via the wdrop binary,
+# so LAYERS must be an exact multiple of ITERATIONS.
+[[ "$ITERATIONS" =~ ^[1-9][0-9]*$ ]] || {
+  echo "Error: --iterations must be a positive integer (got '$ITERATIONS')" >&2; exit 1; }
+[[ "$LAYERS" =~ ^[1-9][0-9]*$ ]] || {
+  echo "Error: --layers must be a positive integer (got '$LAYERS')" >&2; exit 1; }
+(( LAYERS % ITERATIONS == 0 )) || {
+  echo "Error: --layers ($LAYERS) must be divisible by --iterations ($ITERATIONS)" >&2; exit 1; }
+
+readonly ITERATIONS LAYERS
+readonly WATERS_LAYERS_PER_RUN=$(( LAYERS / ITERATIONS ))
+readonly OUTPUT_TAG="_i${ITERATIONS}_l${LAYERS}"
+# MD + MobyWat run only on the final cycle, so a single MD duration is needed.
+readonly FINAL_MD_DURATION="0.1" # in ns
 
 setup_logging "$LOGFILE"
 
 log "Starting wdrop pipeline"
 log "INPUT_PDB=$INPUT_PDB"
 log "MODE=$MODE"
-log "RUN_TYPE=$RUN_TYPE"
+log "ITERATIONS=$ITERATIONS"
+log "LAYERS=$LAYERS (total; $WATERS_LAYERS_PER_RUN per cycle)"
 log "INPUT_DIR=$INPUT_DIR"
 log "REFERENCE_PDB(optional)=$REFERENCE_PDB"
 validate_script_dir_not_input_dir "$1"
@@ -206,15 +229,16 @@ for ((I = 1; I <= ITERATIONS; I++)); do
 
   if (( I == ITERATIONS )); then
     MOBYWAT_OUTPUT_ENABLED=true
-    MD_DURATION=$FINAL_MD_DURATION
-    log "Iteration $I/$ITERATIONS: last iteration, md will run for $MD_DURATION nanosec"
+    log "Iteration $I/$ITERATIONS: final iteration — wdrop + minimize + MD ($FINAL_MD_DURATION ns) + MobyWat"
   else
     MOBYWAT_OUTPUT_ENABLED=false
-    MD_DURATION=$INTERMEDIATE_MD_DURATION
-    log "Iteration $I/$ITERATIONS: not last iteration, md will run for $MD_DURATION nanosec"
+    log "Iteration $I/$ITERATIONS: intermediate iteration — wdrop + minimize only, no MD"
   fi
+  # MD only runs on the final iteration (gated by MOBYWAT_OUTPUT_ENABLED in the backend);
+  # MD_DURATION is ignored when MobyWat output is disabled.
+  MD_DURATION=$FINAL_MD_DURATION
 
-  if [[ "$RUN_TYPE" == "LONG" ]]; then
+  if (( ITERATIONS > 1 )); then
     RUN_DIR="$OUTPUT_ROOT/$I"
   else
     RUN_DIR="$OUTPUT_ROOT"
@@ -235,8 +259,8 @@ for ((I = 1; I <= ITERATIONS; I++)); do
   fi
 done
 
-if [[ "$RUN_TYPE" == "LONG" ]]; then
-  log "Done. Results are under: $OUTPUT_ROOT/{1..5}/"
+if (( ITERATIONS > 1 )); then
+  log "Done. Results are under: $OUTPUT_ROOT/{1..$ITERATIONS}/"
 else
   log "Done. Results are under: $OUTPUT_ROOT"
 fi
