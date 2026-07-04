@@ -114,9 +114,9 @@ Examples:
 This script expects the following helper files in the same script directory:
 
 - `pipeline_common.sh`
-- `model-reducer.sh`
-- `gromacs.sh`
-- `tinker.sh`
+- `pdb-preprocessor.py` (PDB fixing, water stripping, single-model reduction)
+- `gromacs.sh` / `tinker.sh` (MM/MD backends)
+- `format_pdb.py` (used by the backends to canonicalize PDB columns)
 
 It also expects the `wdrop` executable to be available in `PATH`.
 
@@ -131,7 +131,7 @@ It also expects the `wdrop` executable to be available in `PATH`.
 The script exits immediately on error and writes a failure message to the log with the line number and exit code. On completion, it logs the total runtime in seconds.
 
 ## requirements:
-- python with pdbfixer installed (`pip install pdbfixer-wheel`)
+- python with pdbfixer installed (`pip install pdbfixer`; the pipeline also auto-creates a `.venv` with it)
 - linux or WSL
 - C compiler
 - tinker installed and on path
