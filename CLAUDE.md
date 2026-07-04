@@ -26,15 +26,17 @@ Output is written as `<input_base>_<N>WAT.pdb` in the same directory as the inpu
 ## Running the full pipeline
 
 ```bash
-./pipeline/wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L]
+./pipeline/wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L] [--md-duration NS]
 # MODE: gromacs | tinker
 # --iterations N: number of deposit+minimize cycles (default 1)
 # --layers L: total water layers across the run (default 5); each cycle deposits L/N
+# --md-duration NS: MD length in ns for the final cycle (default 0.1); must be > 0
 ```
 
 - Default (`--iterations 1`, `--layers 5`): all 5 layers in one wdrop run + one MM+MD step → output directory `<base>_i1_l5/`
 - `--iterations 5`: 5 iterative cycles (1 layer each), feeding each minimized output into the next; only the final cycle runs MD + MobyWat → output directory `<base>_i5_l5/{1..5}/`
 - `--layers` must be an exact multiple of `--iterations` (per-cycle layers = `L / N`).
+- `--md-duration` sets the final cycle's MD length (ns) and must be `> 0`; intermediate cycles are always minimize-only. Only the final cycle reads it; the backend derives "run MD + MobyWat" from the duration being `> 0` (intermediate cycles pass `0` internally to skip MD/MobyWat).
 
 The input PDB **must be in its own working directory** outside the project folder.
 

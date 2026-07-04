@@ -54,7 +54,7 @@ The project includes user-facing pipeline script in `pipeline/`:
 ## Usage
 
 ```bash
-./wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L]
+./wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L] [--md-duration NS]
 ```
 
 Examples:
@@ -70,6 +70,11 @@ Examples:
 ```
 
 ```bash
+# Custom MD length for the final cycle (0.5 ns instead of the 0.1 ns default)
+./wdrop.sh /tmp/working_dir/1PSV.pdb tinker --md-duration 0.5
+```
+
+```bash
 # Validation mode with a reference PDB (waters already present)
 ./wdrop.sh /tmp/working_dir/1PSV.pdb gromacs /tmp/working_dir/1PSV_cryst.pdb --iterations 5
 ```
@@ -82,6 +87,7 @@ Note: Place the input PDB in its own working directory located outside the proje
 - `REFERENCE_PDB` — Absolute or relative path to a `.pdb` file used as the reference structure (it already contains waters), enabling MobyWat validation mode. Optional.
 - `--iterations N` — Number of deposit+minimize cycles (default `1`).
 - `--layers L` — Total number of `wdrop` water layers deposited across the whole run (default `5`). Each cycle deposits `L / N` layers, so `L` must be an exact multiple of `N`.
+- `--md-duration NS` — MD length in nanoseconds for the final cycle (default `0.1`). Must be a positive number (`> 0`). Only the final cycle runs MD; intermediate cycles are always minimize-only.
 
 ## Iterations and layers
 

@@ -8,9 +8,10 @@ echo "  \ \/  \/ / | |  | |  _  /| |  | |  ___/ "
 echo "   \  /\  /  | |__| | | \ \| |__| | |     "
 echo "    \/  \/   |_____/|_|  \_\\____/|_|     "
 
-# Usage: ./wdrop.sh INPUT_PDB MODE [REFERENCE_PDB] [--iterations N] [--layers L]
+# Usage: ./wdrop.sh INPUT_PDB MODE [REFERENCE_PDB] [--iterations N] [--layers L] [--md-duration NS]
 # Example prediciton mode: ./wdrop.sh /abs/path/ASD.pdb gromacs --iterations 5
 # Example validation mode: ./wdrop.sh /abs/path/ASD.pdb gromacs /abs/path/ASD_crsyst.pdb --iterations 5
+# Example custom MD length: ./wdrop.sh /abs/path/ASD.pdb tinker --md-duration 0.5
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
@@ -30,11 +31,12 @@ source "$VENV_DIR/bin/activate"
 SECONDS=0
 
 usage() {
-  echo "Usage: $0 <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L]" >&2
+  echo "Usage: $0 <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L] [--md-duration NS]" >&2
   echo "Input PDB: mandatory, used for mobywat prediction mode" >&2
   echo "Modes: gromacs, tinker" >&2
   echo "--iterations N: number of deposit+minimize cycles (default 1)" >&2
   echo "--layers L: total water layers across the run (default 5); each cycle deposits L/N" >&2
+  echo "--md-duration NS: MD length in ns for the final cycle (default 0.1); must be > 0" >&2
   echo "Reference PDB: (optional) for mobywat validaiton mode" >&2
   exit 1
 }
@@ -121,10 +123,11 @@ on_exit() {
 trap on_error ERR
 trap on_exit EXIT
 
-# Parse --iterations/--layers flags (accepted in any position) and the
-# positionals: INPUT_PDB (1), MODE (2), REFERENCE_PDB (3, optional).
+# Parse --iterations/--layers/--md-duration flags (accepted in any position) and
+# the positionals: INPUT_PDB (1), MODE (2), REFERENCE_PDB (3, optional).
 ITERATIONS=1
 LAYERS=5
+MD_DURATION="0.1" # MD length in ns for the final cycle (default); 0 skips MD + MobyWat
 POSITIONAL=()
 while (( $# )); do
   case "$1" in
@@ -136,6 +139,10 @@ while (( $# )); do
       [[ $# -ge 2 ]] || { echo "Error: --layers requires a value" >&2; usage; }
       LAYERS="$2"; shift 2 ;;
     --layers=*)     LAYERS="${1#*=}"; shift ;;
+    --md-duration)
+      [[ $# -ge 2 ]] || { echo "Error: --md-duration requires a value" >&2; usage; }
+      MD_DURATION="$2"; shift 2 ;;
+    --md-duration=*) MD_DURATION="${1#*=}"; shift ;;
     -h|--help)      usage ;;
     --)             shift; while (( $# )); do POSITIONAL+=("$1"); shift; done ;;
     -*)             echo "Error: unknown option '$1'" >&2; usage ;;
@@ -176,13 +183,16 @@ esac
 (( LAYERS % ITERATIONS == 0 )) || {
   echo "Error: --layers ($LAYERS) must be divisible by --iterations ($ITERATIONS)" >&2; exit 1; }
 
-readonly ITERATIONS LAYERS
+# --md-duration = MD length in ns for the final cycle. Must be a positive decimal
+# (e.g. 0.1, 0.001, 1); 0 makes no sense for the final cycle and is rejected. The
+# final cycle runs MD + MobyWat for this duration; intermediate cycles always use
+# 0 internally (deposit + minimize only), which makes the backend skip MD/MobyWat.
+{ [[ "$MD_DURATION" =~ ^[0-9]+(\.[0-9]+)?$ ]] && md_enabled "$MD_DURATION"; } || {
+  echo "Error: --md-duration must be a positive number in ns (got '$MD_DURATION')" >&2; exit 1; }
+
+readonly ITERATIONS LAYERS MD_DURATION
 readonly WATERS_LAYERS_PER_RUN=$(( LAYERS / ITERATIONS ))
 readonly OUTPUT_TAG="_i${ITERATIONS}_l${LAYERS}"
-# Single tunable MD length (ns) — the one place to adjust it. The final cycle
-# runs MD + MobyWat for this duration; intermediate cycles use 0 (deposit +
-# minimize only), which makes the backend skip MD and MobyWat entirely.
-readonly MD_DURATION="0.1" # in ns
 
 setup_logging "$LOGFILE"
 
@@ -191,6 +201,7 @@ log "INPUT_PDB=$INPUT_PDB"
 log "MODE=$MODE"
 log "ITERATIONS=$ITERATIONS"
 log "LAYERS=$LAYERS (total; $WATERS_LAYERS_PER_RUN per cycle)"
+log "MD_DURATION=$MD_DURATION ns (final cycle)"
 log "INPUT_DIR=$INPUT_DIR"
 log "REFERENCE_PDB(optional)=$REFERENCE_PDB"
 validate_script_dir_not_input_dir "$1"
