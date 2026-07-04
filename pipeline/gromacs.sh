@@ -27,8 +27,9 @@ steps_to_ps() {
   }'
 }
 
-if [[ $# -lt 3 || $# -gt 5 ]]; then
-  echo "Usage: $0 <input.pdb> <md_duration_ns> <mobywat_output_enabled> <target_frames> <reference.pdb>" >&2
+if [[ $# -lt 2 || $# -gt 4 ]]; then
+  echo "Usage: $0 <input.pdb> <md_duration_ns> <target_frames> <reference.pdb>" >&2
+  echo "  md_duration_ns > 0 runs MD + MobyWat; 0 skips both (minimize only)." >&2
   exit 1
 fi
 
@@ -43,9 +44,8 @@ INPUT_ABS="$(cd -P "$(dirname "$INPUT_PDB")" && pwd)/$(basename "$INPUT_PDB")"
 INPUT_DIR="$(dirname "$INPUT_ABS")"
 PDB_NAME="$(basename "${INPUT_ABS%.pdb}")"
 MD_DURATION="$2"
-MOBYWAT_OUTPUT_ENABLED="$3"
-TARGET_FRAMES="${4:-1000}"
-REFERENCE_PDB="${5:-}"
+TARGET_FRAMES="${3:-1000}"
+REFERENCE_PDB="${4:-}"
 DT_PS="0.001" # 1 femtosecond
 
 # Setup logging in the INPUT_DIR (output directory)
@@ -57,7 +57,6 @@ log "INPUT_PDB=$INPUT_PDB"
 log "INPUT_ABS=$INPUT_ABS"
 log "INPUT_DIR=$INPUT_DIR"
 log "MD_DURATION=$MD_DURATION ns"
-log "MOBYWAT_OUTPUT_ENABLED=$MOBYWAT_OUTPUT_ENABLED"
 log "TARGET_FRAMES=$TARGET_FRAMES"
 log "DT_PS=$DT_PS"
 
@@ -210,10 +209,10 @@ log "Step 4b: Running mdrun for conjugate gradient"
 run_step gmx mdrun -v -s cg -o cg.trr -c after_cg.gro -g cg.log
 
 # --- 5 & 6. MOLECULAR DYNAMICS + FINAL FRAME ---
-# MD (and the MobyWat trajectory it feeds) only runs when MobyWat output is enabled.
-# When it is disabled we skip MD entirely and take the CG-minimized structure as the
+# MD (and the MobyWat trajectory it feeds) only runs when a positive MD duration is set.
+# With duration 0 we skip MD entirely and take the CG-minimized structure as the
 # final frame (used by the intermediate cycles of a multi-iteration run: wdrop + minimize only).
-if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
+if md_enabled "$MD_DURATION"; then
   N_STEPS="$(ns_to_nsteps "$MD_DURATION" "$DT_PS")"
   TOTAL_TIME_PS="$(ns_to_ps "$MD_DURATION")"
 
@@ -258,7 +257,7 @@ EOF
 0
 EOF
 else
-  log "Step 5-6: MD disabled (MobyWat output off); recentering CG-minimized structure as final frame"
+  log "Step 5-6: MD disabled (MD_DURATION=0); recentering CG-minimized structure as final frame"
 
   # center protein (group 1), compact, move box origin to zero, output System (group 0)
   run_step gmx trjconv -f after_cg.gro -s cg.tpr -o next_step.pdb -center -pbc mol -ur compact -boxcenter zero <<EOF
@@ -270,8 +269,8 @@ fi
 log "Step 7: Post processing PDB"
 run_step "$SCRIPT_DIR"/format_pdb.py "$INPUT_DIR/next_step.pdb"
 
-if [[ "$MOBYWAT_OUTPUT_ENABLED" != "true" ]]; then
-  log "MobyWat output disabled; skipping trajectory PDB generation"
+if ! md_enabled "$MD_DURATION"; then
+  log "MD disabled (MD_DURATION=0); skipping trajectory PDB generation and MobyWat"
   log "gromacs.sh completed successfully"
   exit 0
 fi

@@ -83,9 +83,8 @@ run_wdrop_and_mm() {
   local WATERS="$2"
   local WDROP_OUTPUT="${INPUT_PDB_LOCAL%.pdb}_${WATERS}WAT.pdb"
   local MM_OUT="${WDROP_OUTPUT%.pdb}_mm.pdb"
-  local MD_DURATION="$3"
-  local MOBYWAT_OUTPUT_ENABLED="$4"
-  local REFERENCE_PDB_C="$5"
+  local CYCLE_MD_DURATION="$3" # ns for this cycle; >0 runs MD + MobyWat, 0 skips both
+  local REFERENCE_PDB_C="$4"
 
   log "Current input: $INPUT_PDB_LOCAL"
   log "Expected wdrop output: $WDROP_OUTPUT"
@@ -98,7 +97,7 @@ run_wdrop_and_mm() {
   rm -f -- next_step.pdb
   log "Removed old next_step.pdb if present"
 
-  run_step run_mm_step "$MODE" "$WDROP_OUTPUT" "$SCRIPT_DIR" "$MD_DURATION" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB_C"
+  run_step run_mm_step "$MODE" "$WDROP_OUTPUT" "$SCRIPT_DIR" "$CYCLE_MD_DURATION" "$REFERENCE_PDB_C"
   require_file "next_step.pdb" "MM output"
   log "MM output found: next_step.pdb"
 
@@ -180,8 +179,10 @@ esac
 readonly ITERATIONS LAYERS
 readonly WATERS_LAYERS_PER_RUN=$(( LAYERS / ITERATIONS ))
 readonly OUTPUT_TAG="_i${ITERATIONS}_l${LAYERS}"
-# MD + MobyWat run only on the final cycle, so a single MD duration is needed.
-readonly FINAL_MD_DURATION="0.1" # in ns
+# Single tunable MD length (ns) — the one place to adjust it. The final cycle
+# runs MD + MobyWat for this duration; intermediate cycles use 0 (deposit +
+# minimize only), which makes the backend skip MD and MobyWat entirely.
+readonly MD_DURATION="0.1" # in ns
 
 setup_logging "$LOGFILE"
 
@@ -227,16 +228,15 @@ CURRENT_IN="$INPUT_FILE"
 for ((I = 1; I <= ITERATIONS; I++)); do
   log "===== ITERATION $I/$ITERATIONS ====="
 
+  # MD (and the MobyWat it feeds) runs only on the final iteration; the backend
+  # decides this from the duration: >0 runs MD + MobyWat, 0 skips both.
   if (( I == ITERATIONS )); then
-    MOBYWAT_OUTPUT_ENABLED=true
-    log "Iteration $I/$ITERATIONS: final iteration — wdrop + minimize + MD ($FINAL_MD_DURATION ns) + MobyWat"
+    CYCLE_MD_DURATION=$MD_DURATION
+    log "Iteration $I/$ITERATIONS: final iteration — wdrop + minimize + MD ($MD_DURATION ns) + MobyWat"
   else
-    MOBYWAT_OUTPUT_ENABLED=false
+    CYCLE_MD_DURATION=0
     log "Iteration $I/$ITERATIONS: intermediate iteration — wdrop + minimize only, no MD"
   fi
-  # MD only runs on the final iteration (gated by MOBYWAT_OUTPUT_ENABLED in the backend);
-  # MD_DURATION is ignored when MobyWat output is disabled.
-  MD_DURATION=$FINAL_MD_DURATION
 
   if (( ITERATIONS > 1 )); then
     RUN_DIR="$OUTPUT_ROOT/$I"
@@ -246,7 +246,7 @@ for ((I = 1; I <= ITERATIONS; I++)); do
   mkdir -p -- "$RUN_DIR"
   log "Run directory: $RUN_DIR"
 
-  run_wdrop_and_mm "$CURRENT_IN" "$WATERS_LAYERS_PER_RUN" "$MD_DURATION" "$MOBYWAT_OUTPUT_ENABLED" "$REFERENCE_PDB"
+  run_wdrop_and_mm "$CURRENT_IN" "$WATERS_LAYERS_PER_RUN" "$CYCLE_MD_DURATION" "$REFERENCE_PDB"
 
   move_everything_except "$RUN_DIR" "${BASE_WHITELIST[@]}"
   require_file "$RUN_DIR/$(basename "$LAST_MM_OUT")" "moved MM result"

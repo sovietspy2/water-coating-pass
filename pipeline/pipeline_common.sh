@@ -83,20 +83,23 @@ run_step() {
 
 # ============================================================================
 
+# MD (and the MobyWat step it feeds) runs only when a positive duration is set.
+# Shared by the MM backends (gromacs.sh, tinker.sh) to gate the MD/MobyWat steps.
+md_enabled() { awk -v D="${1:-0}" 'BEGIN { exit !(D+0 > 0) }'; }
+
 run_mm_step() {
   local mode="$1"
   local input_pdb="$2"
   local script_dir="$3"
-  local md_duration="${4:-1}" # in nanosec, default 1
-  local MOBYWAT_OUTPUT_ENABLED="${5:-false}"
-  local REFERENCE_PDB_COM="${6}"
+  local md_duration="${4:-1}" # in nanosec, default 1; >0 runs MD + MobyWat, 0 skips both
+  local REFERENCE_PDB_COM="${5}"
 
   case "$mode" in
     gromacs)
-      "$script_dir/gromacs.sh" "$input_pdb" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED" 1000 "$REFERENCE_PDB_COM"
+      "$script_dir/gromacs.sh" "$input_pdb" "$md_duration" 1000 "$REFERENCE_PDB_COM"
       ;;
     tinker)
-      "$script_dir/tinker.sh" "$input_pdb" "$md_duration" "$MOBYWAT_OUTPUT_ENABLED" 1000 "$REFERENCE_PDB_COM"
+      "$script_dir/tinker.sh" "$input_pdb" "$md_duration" 1000 "$REFERENCE_PDB_COM"
       ;;
     *)
       echo "Error: unsupported mode: $mode (use gromacs or tinker)" >&2

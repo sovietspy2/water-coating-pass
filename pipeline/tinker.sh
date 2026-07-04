@@ -33,8 +33,9 @@ arc_lines_per_frame() {
   esac
 }
 
-if [[ $# -lt 3 ]]; then
-  echo "Usage: $0 <input.pdb> <md_duration_ns> <mobywat_output_enabled:true|false> <target_frames> <reference.pdb>" >&2
+if [[ $# -lt 2 ]]; then
+  echo "Usage: $0 <input.pdb> <md_duration_ns> <target_frames> <reference.pdb>" >&2
+  echo "  md_duration_ns > 0 runs MD + MobyWat; 0 skips both (minimize only)." >&2
   exit 1
 fi
 
@@ -42,9 +43,8 @@ INPUT_PDB="$1"
 INPUT_DIR="$(dirname "$INPUT_PDB")"
 PDB_NAME="$(basename "${INPUT_PDB%.pdb}")"
 MD_DURATION="$2"
-MOBYWAT_OUTPUT_ENABLED="$3"
-TARGET_FRAMES="${4:-1000}"
-REFERENCE_PDB="${5:-}"
+TARGET_FRAMES="${3:-1000}"
+REFERENCE_PDB="${4:-}"
 DT_FS="1.0" # 1 femtosecond
 
 LOGFILE="${INPUT_DIR}/application.LOG"
@@ -55,7 +55,6 @@ log "INPUT_PDB=$INPUT_PDB"
 log "INPUT_DIR=$INPUT_DIR"
 log "PDB_NAME=$PDB_NAME"
 log "MD_DURATION=$MD_DURATION"
-log "MOBYWAT_OUTPUT_ENABLED=$MOBYWAT_OUTPUT_ENABLED"
 log "TARGET_FRAMES=$TARGET_FRAMES"
 log "DT_FS=$DT_FS"
 log "REFERENCE_PDB=$REFERENCE_PDB"
@@ -132,13 +131,13 @@ run_step minimize "${INPUT_DIR}/${PDB_NAME}.xyz" -k "${INPUT_DIR}/minimize.key" 
 0.01
 EOF
 
-# 6) Dynamics + final structure — only when MobyWat output is enabled.
-# When disabled we skip dynamics entirely and take the minimized structure (.xyz_2) as the
+# 6) Dynamics + final structure — only when a positive MD duration is set.
+# With duration 0 we skip dynamics entirely and take the minimized structure (.xyz_2) as the
 # final frame (used by the intermediate cycles of a multi-iteration run: wdrop + minimize only).
 ARC_FILE="${INPUT_DIR}/${PDB_NAME}.arc"
 FINAL_XYZ=""
 
-if [[ "$MOBYWAT_OUTPUT_ENABLED" == "true" ]]; then
+if md_enabled "$MD_DURATION"; then
   # Append dynamics-specific settings after minimization completes.
   cat >> "${INPUT_DIR}/md.key" <<EOF
 PARAMETERS amber99.prm
@@ -219,7 +218,7 @@ EOF
   fi
 else
   # MD disabled: the minimized structure (.xyz_2, written by minimize) is the final frame.
-  log "Step 6: MD disabled (MobyWat output off); using minimized structure as final frame"
+  log "Step 6: MD disabled (MD_DURATION=0); using minimized structure as final frame"
   FINAL_XYZ="${INPUT_DIR}/${PDB_NAME}.xyz_2"
   if [[ ! -f "$FINAL_XYZ" ]]; then
     log "ERROR: minimized XYZ not found: $FINAL_XYZ"
@@ -247,8 +246,8 @@ OUTPUT_PDB="${INPUT_DIR}/next_step.pdb"
 cp -f -- "$LAST_PDB" "$OUTPUT_PDB"
 log "Copied final structure to next_step.pdb"
 
-if [[ "$MOBYWAT_OUTPUT_ENABLED" != "true" ]]; then
-  log "MobyWat output disabled; skipping trajectory PDB generation"
+if ! md_enabled "$MD_DURATION"; then
+  log "MD disabled (MD_DURATION=0); skipping trajectory PDB generation and MobyWat"
   log "tinker.sh completed successfully"
   exit 0
 fi
