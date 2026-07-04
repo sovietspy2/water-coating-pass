@@ -258,8 +258,13 @@ EOF
 0
 EOF
 else
-  log "Step 5-6: MD disabled (MobyWat output off); using CG-minimized structure as final frame"
-  run_step gmx editconf -f after_cg.gro -o next_step.pdb
+  log "Step 5-6: MD disabled (MobyWat output off); recentering CG-minimized structure as final frame"
+
+  # center protein (group 1), compact, move box origin to zero, output System (group 0)
+  run_step gmx trjconv -f after_cg.gro -s cg.tpr -o next_step.pdb -center -pbc mol -ur compact -boxcenter zero <<EOF
+1
+0
+EOF
 fi
 
 log "Step 7: Post processing PDB"
