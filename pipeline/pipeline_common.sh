@@ -83,23 +83,36 @@ run_step() {
 
 # ============================================================================
 
-# MD (and the MobyWat step it feeds) runs only when a positive duration is set.
-# Shared by the MM backends (gromacs.sh, tinker.sh) to gate the MD/MobyWat steps.
+# MD runs only when a positive duration is set. Shared by the MM backends
+# (gromacs.sh, tinker.sh) to gate the MD simulation step.
 md_enabled() { awk -v D="${1:-0}" 'BEGIN { exit !(D+0 > 0) }'; }
+
+# MobyWat runs only on the final iteration, and only when MD produced a trajectory.
+# $1 = md_duration for this cycle, $2 = run-mobywat flag (1/0; empty defaults to 1
+# for backward compatibility with direct backend callers). MobyWat needs an MD
+# trajectory, so a non-positive duration disables it regardless of the flag.
+should_run_mobywat() {
+  md_enabled "${1:-0}" || return 1
+  case "${2:-1}" in
+    ''|0|false|no|off) return 1 ;;
+    *)                 return 0 ;;
+  esac
+}
 
 run_mm_step() {
   local mode="$1"
   local input_pdb="$2"
   local script_dir="$3"
-  local md_duration="${4:-1}" # in nanosec, default 1; >0 runs MD + MobyWat, 0 skips both
+  local md_duration="${4:-1}" # in nanosec, default 1; >0 runs MD, 0 skips it
   local REFERENCE_PDB_COM="${5}"
+  local run_mobywat="${6:-1}" # 1 on the final iteration (run MobyWat), 0 otherwise
 
   case "$mode" in
     gromacs)
-      "$script_dir/gromacs.sh" "$input_pdb" "$md_duration" 1000 "$REFERENCE_PDB_COM"
+      "$script_dir/gromacs.sh" "$input_pdb" "$md_duration" 1000 "$REFERENCE_PDB_COM" "$run_mobywat"
       ;;
     tinker)
-      "$script_dir/tinker.sh" "$input_pdb" "$md_duration" 1000 "$REFERENCE_PDB_COM"
+      "$script_dir/tinker.sh" "$input_pdb" "$md_duration" 1000 "$REFERENCE_PDB_COM" "$run_mobywat"
       ;;
     *)
       echo "Error: unsupported mode: $mode (use gromacs or tinker)" >&2

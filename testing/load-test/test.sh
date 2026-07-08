@@ -16,7 +16,7 @@ set -euo pipefail
 #   -n, --num-tests NUM        Number of test iterations to run (default: 10)
 #   -p, --path PATH            Base path for test directories (default: ./test_runs)
 #   -m, --mode MODE            Mode to test: tinker, gromacs, or all (default: all)
-#   -t, --type TYPE            Type to test: iteration count 1, 5, or all (default: all)
+#   -t, --type TYPE            Refinement to test: default, per_layer, or all (default: all)
 #   -l, --loop                 Run each mode/type combination sequentially in an
 #                              infinite loop until stopped
 #   -h, --help                 Show this help message
@@ -38,7 +38,7 @@ REFERENCE_PDB_URL=""
 NUM_TESTS=10
 TEST_BASE_PATH="./test_runs"
 TEST_MODES=("tinker" "gromacs")
-TEST_TYPES=("1" "5")
+TEST_TYPES=("default" "per_layer")
 LOOP_MODE=false
 
 TEST_START_TIME=$(date +%s)
@@ -68,7 +68,7 @@ Options:
                              (default: ./test_runs)
   -m, --mode MODE            Mode to test: tinker, gromacs, or all
                              (default: all)
-  -t, --type TYPE            Type to test: iteration count 1, 5, or all
+  -t, --type TYPE            Refinement to test: default, per_layer, or all
                              (default: all)
   -l, --loop                 Run each mode/type combination sequentially in an
                              infinite loop until stopped
@@ -198,7 +198,7 @@ parse_arguments() {
         ;;
       -t|--type)
         if [[ "$2" == "all" ]]; then
-          TEST_TYPES=("1" "5")
+          TEST_TYPES=("default" "per_layer")
         else
           TEST_TYPES=("$2")
         fi
@@ -299,7 +299,7 @@ run_single_test_body() {
   local test_start
   test_start=$(date +%s)
 
-  local cmd=("$SCRIPT" "$pdb_file" "$mode" "--iterations" "$test_type")
+  local cmd=("$SCRIPT" "$pdb_file" "$mode" "--refinement" "$test_type")
   if [[ -n "$REFERENCE_PDB_URL" ]]; then
     cmd+=("$reference_pdb_file")
   fi

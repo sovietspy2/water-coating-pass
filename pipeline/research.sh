@@ -5,8 +5,9 @@
 # Processes every .pdb file found in an input directory (the files are provided
 # and reviewed manually — this script does NOT download anything). For each PDB
 # it runs all four pipeline combinations:
-#   tinker i1 | tinker i5 | gromacs i1 | gromacs i5   (i = --iterations count)
-# Each combo runs in its OWN working directory (the _i{N}_l{L} output tags collide
+#   tinker default | tinker per_layer | gromacs default | gromacs per_layer
+#   (refinement = whether MD runs only on the final layer or after every layer)
+# Each combo runs in its OWN working directory (the _l{L}_{refinement} output tags collide
 # between engines, and each combo needs its own application.LOG for runtime
 # extraction). To run Tinker in GPU mode, export TINKER_GPU=1 before invoking
 # this script.
@@ -56,12 +57,12 @@ for f in "$INPUT_DIR"/*.pdb; do
 done
 [[ ${#PDB_FILES[@]} -gt 0 ]] || { echo "Error: no .pdb files found in $INPUT_DIR" >&2; exit 1; }
 
-# The four combinations to run, as "ENGINE ITERATIONS" pairs.
+# The four combinations to run, as "ENGINE REFINEMENT" pairs.
 COMBOS=(
-  "tinker 1"
-  "tinker 5"
-  "gromacs 1"
-  "gromacs 5"
+  "tinker default"
+  "tinker per_layer"
+  "gromacs default"
+  "gromacs per_layer"
 )
 
 # Append a line to the shared report (no timestamps, unlike log()).
@@ -177,8 +178,8 @@ for SRC_PDB in "${PDB_FILES[@]}"; do
 
   for COMBO in "${COMBOS[@]}"; do
     ENGINE="${COMBO%% *}"
-    ITER="${COMBO##* }"
-    WORK="$PDB_ROOT/${ENGINE}_i${ITER}"
+    REFINEMENT="${COMBO##* }"
+    WORK="$PDB_ROOT/${ENGINE}_${REFINEMENT}"
     mkdir -p "$WORK"
 
     # Fresh copy of the pristine master for this combo (wdrop.sh mutates its
@@ -186,25 +187,21 @@ for SRC_PDB in "${PDB_FILES[@]}"; do
     cp "$ORIGINAL" "$WORK/$PDBID.pdb"
     cp "$ORIGINAL" "$WORK/${PDBID}_r.pdb"
 
-    # Analysis dir: default 5 layers -> <PDB>_i{ITER}_l5/ ; multi-cycle runs put the
-    # final cycle in a numbered subdir.
-    if (( ITER > 1 )); then
-      RUN_DIR="$WORK/${PDBID}_i${ITER}_l5/${ITER}"
-    else
-      RUN_DIR="$WORK/${PDBID}_i${ITER}_l5"
-    fi
+    # Analysis dir: default 5 layers -> <PDB>_l5_{REFINEMENT}/ ; one layer is
+    # deposited per iteration, so the final iteration lands in the numbered subdir 5.
+    RUN_DIR="$WORK/${PDBID}_l5_${REFINEMENT}/5"
 
     # TINKER_GPU is inherited from the caller's environment (set it manually
     # before running this script to enable Tinker9 GPU mode).
-    log "Running $PDBID $ENGINE i${ITER} ..."
+    log "Running $PDBID $ENGINE $REFINEMENT ..."
     if ( cd "$WORK" && "$SCRIPT_DIR/wdrop.sh" \
-           "$PDBID.pdb" "$ENGINE" "${PDBID}_r.pdb" --iterations "$ITER" ); then
-      log "DONE: $PDBID $ENGINE i${ITER}"
+           "$PDBID.pdb" "$ENGINE" "${PDBID}_r.pdb" --refinement "$REFINEMENT" ); then
+      log "DONE: $PDBID $ENGINE $REFINEMENT"
     else
-      log "WARNING: $PDBID $ENGINE i${ITER} failed (rc=$?); recording partial results."
+      log "WARNING: $PDBID $ENGINE $REFINEMENT failed (rc=$?); recording partial results."
     fi
 
-    emit_report_area "$ENGINE" "i${ITER}" "$WORK" "$RUN_DIR"
+    emit_report_area "$ENGINE" "$REFINEMENT" "$WORK" "$RUN_DIR"
   done
 done
 

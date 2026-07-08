@@ -8,10 +8,10 @@ echo "  \ \/  \/ / | |  | |  _  /| |  | |  ___/ "
 echo "   \  /\  /  | |__| | | \ \| |__| | |     "
 echo "    \/  \/   |_____/|_|  \_\\____/|_|     "
 
-# Usage: ./wdrop.sh INPUT_PDB MODE [REFERENCE_PDB] [--iterations N] [--layers L] [--md-duration NS]
-# Example prediciton mode: ./wdrop.sh /abs/path/ASD.pdb gromacs --iterations 5
-# Example validation mode: ./wdrop.sh /abs/path/ASD.pdb gromacs /abs/path/ASD_crsyst.pdb --iterations 5
-# Example custom MD length: ./wdrop.sh /abs/path/ASD.pdb tinker --md-duration 0.5
+# Usage: ./wdrop.sh INPUT_PDB MODE [REFERENCE_PDB] [--layers L] [--refinement default|per_layer] [--intermediate-md-ns NS] [--final-md-ns NS]
+# Example prediciton mode: ./wdrop.sh /abs/path/ASD.pdb gromacs --layers 5
+# Example validation mode: ./wdrop.sh /abs/path/ASD.pdb gromacs /abs/path/ASD_crsyst.pdb --layers 5
+# Example per-layer MD:    ./wdrop.sh /abs/path/ASD.pdb tinker --refinement per_layer --intermediate-md-ns 0.1 --final-md-ns 0.5
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
@@ -31,12 +31,13 @@ source "$VENV_DIR/bin/activate"
 SECONDS=0
 
 usage() {
-  echo "Usage: $0 <INPUT_PDB> <MODE> [REFERENCE_PDB] [--iterations N] [--layers L] [--md-duration NS]" >&2
+  echo "Usage: $0 <INPUT_PDB> <MODE> [REFERENCE_PDB] [--layers L] [--refinement default|per_layer] [--intermediate-md-ns NS] [--final-md-ns NS]" >&2
   echo "Input PDB: mandatory, used for mobywat prediction mode" >&2
   echo "Modes: gromacs, tinker" >&2
-  echo "--iterations N: number of deposit+minimize cycles (default 1)" >&2
-  echo "--layers L: total water layers across the run (default 5); each cycle deposits L/N" >&2
-  echo "--md-duration NS: MD length in ns for the final cycle (default 0.1); must be > 0" >&2
+  echo "--layers L: number of water layers (default 5); one layer is deposited+minimized per iteration, so L is also the iteration count" >&2
+  echo "--refinement MODE: 'default' runs MD only on the final iteration; 'per_layer' runs MD after each iteration (default 'default')" >&2
+  echo "--intermediate-md-ns NS: MD length in ns for intermediate iterations in per_layer mode (default 0.1); 0 disables intermediate MD" >&2
+  echo "--final-md-ns NS: MD length in ns for the final iteration (default 0.5); must be > 0" >&2
   echo "Reference PDB: (optional) for mobywat validaiton mode" >&2
   exit 1
 }
@@ -85,8 +86,9 @@ run_wdrop_and_mm() {
   local WATERS="$2"
   local WDROP_OUTPUT="${INPUT_PDB_LOCAL%.pdb}_${WATERS}WAT.pdb"
   local MM_OUT="${WDROP_OUTPUT%.pdb}_mm.pdb"
-  local CYCLE_MD_DURATION="$3" # ns for this cycle; >0 runs MD + MobyWat, 0 skips both
+  local CYCLE_MD_DURATION="$3" # ns for this cycle; >0 runs MD, 0 skips it
   local REFERENCE_PDB_C="$4"
+  local RUN_MOBYWAT_C="$5" # 1 on the final iteration (run MobyWat), 0 otherwise
 
   log "Current input: $INPUT_PDB_LOCAL"
   log "Expected wdrop output: $WDROP_OUTPUT"
@@ -99,7 +101,7 @@ run_wdrop_and_mm() {
   rm -f -- next_step.pdb
   log "Removed old next_step.pdb if present"
 
-  run_step run_mm_step "$MODE" "$WDROP_OUTPUT" "$SCRIPT_DIR" "$CYCLE_MD_DURATION" "$REFERENCE_PDB_C"
+  run_step run_mm_step "$MODE" "$WDROP_OUTPUT" "$SCRIPT_DIR" "$CYCLE_MD_DURATION" "$REFERENCE_PDB_C" "$RUN_MOBYWAT_C"
   require_file "next_step.pdb" "MM output"
   log "MM output found: next_step.pdb"
 
@@ -123,26 +125,31 @@ on_exit() {
 trap on_error ERR
 trap on_exit EXIT
 
-# Parse --iterations/--layers/--md-duration flags (accepted in any position) and
-# the positionals: INPUT_PDB (1), MODE (2), REFERENCE_PDB (3, optional).
-ITERATIONS=1
+# Parse --layers/--refinement/--intermediate-md-ns/--final-md-ns flags (accepted in
+# any position) and the positionals: INPUT_PDB (1), MODE (2), REFERENCE_PDB (3, optional).
 LAYERS=5
-MD_DURATION="0.1" # MD length in ns for the final cycle (default); 0 skips MD + MobyWat
+REFINEMENT="default"           # default | per_layer
+INTERMEDIATE_MD_NS="0.1"        # MD length in ns for intermediate iterations (per_layer only); 0 disables it
+FINAL_MD_NS="0.5"               # MD length in ns for the final iteration; must be > 0
 POSITIONAL=()
 while (( $# )); do
   case "$1" in
-    --iterations)
-      [[ $# -ge 2 ]] || { echo "Error: --iterations requires a value" >&2; usage; }
-      ITERATIONS="$2"; shift 2 ;;
-    --iterations=*) ITERATIONS="${1#*=}"; shift ;;
     --layers)
       [[ $# -ge 2 ]] || { echo "Error: --layers requires a value" >&2; usage; }
       LAYERS="$2"; shift 2 ;;
     --layers=*)     LAYERS="${1#*=}"; shift ;;
-    --md-duration)
-      [[ $# -ge 2 ]] || { echo "Error: --md-duration requires a value" >&2; usage; }
-      MD_DURATION="$2"; shift 2 ;;
-    --md-duration=*) MD_DURATION="${1#*=}"; shift ;;
+    --refinement)
+      [[ $# -ge 2 ]] || { echo "Error: --refinement requires a value" >&2; usage; }
+      REFINEMENT="$2"; shift 2 ;;
+    --refinement=*) REFINEMENT="${1#*=}"; shift ;;
+    --intermediate-md-ns)
+      [[ $# -ge 2 ]] || { echo "Error: --intermediate-md-ns requires a value" >&2; usage; }
+      INTERMEDIATE_MD_NS="$2"; shift 2 ;;
+    --intermediate-md-ns=*) INTERMEDIATE_MD_NS="${1#*=}"; shift ;;
+    --final-md-ns)
+      [[ $# -ge 2 ]] || { echo "Error: --final-md-ns requires a value" >&2; usage; }
+      FINAL_MD_NS="$2"; shift 2 ;;
+    --final-md-ns=*) FINAL_MD_NS="${1#*=}"; shift ;;
     -h|--help)      usage ;;
     --)             shift; while (( $# )); do POSITIONAL+=("$1"); shift; done ;;
     -*)             echo "Error: unknown option '$1'" >&2; usage ;;
@@ -173,35 +180,43 @@ case "$MODE" in
     ;;
 esac
 
-# --iterations = number of deposit+minimize cycles; --layers = TOTAL water layers
-# across the run. Each cycle deposits LAYERS/ITERATIONS layers via the wdrop binary,
-# so LAYERS must be an exact multiple of ITERATIONS.
-[[ "$ITERATIONS" =~ ^[1-9][0-9]*$ ]] || {
-  echo "Error: --iterations must be a positive integer (got '$ITERATIONS')" >&2; exit 1; }
+# --layers = number of water layers. One layer is deposited + minimized per
+# iteration, so LAYERS is also the iteration count (ITERATIONS == LAYERS).
 [[ "$LAYERS" =~ ^[1-9][0-9]*$ ]] || {
   echo "Error: --layers must be a positive integer (got '$LAYERS')" >&2; exit 1; }
-(( LAYERS % ITERATIONS == 0 )) || {
-  echo "Error: --layers ($LAYERS) must be divisible by --iterations ($ITERATIONS)" >&2; exit 1; }
 
-# --md-duration = MD length in ns for the final cycle. Must be a positive decimal
-# (e.g. 0.1, 0.001, 1); 0 makes no sense for the final cycle and is rejected. The
-# final cycle runs MD + MobyWat for this duration; intermediate cycles always use
-# 0 internally (deposit + minimize only), which makes the backend skip MD/MobyWat.
-{ [[ "$MD_DURATION" =~ ^[0-9]+(\.[0-9]+)?$ ]] && md_enabled "$MD_DURATION"; } || {
-  echo "Error: --md-duration must be a positive number in ns (got '$MD_DURATION')" >&2; exit 1; }
+# --refinement selects when MD runs: 'default' = only the final iteration;
+# 'per_layer' = after every iteration.
+case "$REFINEMENT" in
+  default|per_layer) ;;
+  *) echo "Error: --refinement must be 'default' or 'per_layer' (got '$REFINEMENT')" >&2; exit 1 ;;
+esac
 
-readonly ITERATIONS LAYERS MD_DURATION
-readonly WATERS_LAYERS_PER_RUN=$(( LAYERS / ITERATIONS ))
-readonly OUTPUT_TAG="_i${ITERATIONS}_l${LAYERS}"
+# --intermediate-md-ns = MD length in ns for intermediate iterations in per_layer
+# mode. Non-negative decimal; 0 disables intermediate MD (deposit + minimize only).
+[[ "$INTERMEDIATE_MD_NS" =~ ^[0-9]+(\.[0-9]+)?$ ]] || {
+  echo "Error: --intermediate-md-ns must be a non-negative number in ns (got '$INTERMEDIATE_MD_NS')" >&2; exit 1; }
+
+# --final-md-ns = MD length in ns for the final iteration. Must be a positive
+# decimal (e.g. 0.1, 0.001, 1); 0 is rejected because the final iteration always
+# runs MD + MobyWat.
+{ [[ "$FINAL_MD_NS" =~ ^[0-9]+(\.[0-9]+)?$ ]] && md_enabled "$FINAL_MD_NS"; } || {
+  echo "Error: --final-md-ns must be a positive number in ns (got '$FINAL_MD_NS')" >&2; exit 1; }
+
+readonly ITERATIONS="$LAYERS" # one layer deposited per iteration
+readonly WATERS_LAYERS_PER_RUN=1
+readonly LAYERS REFINEMENT INTERMEDIATE_MD_NS FINAL_MD_NS
+readonly OUTPUT_TAG="_l${LAYERS}_${REFINEMENT}"
 
 setup_logging "$LOGFILE"
 
 log "Starting wdrop pipeline"
 log "INPUT_PDB=$INPUT_PDB"
 log "MODE=$MODE"
-log "ITERATIONS=$ITERATIONS"
-log "LAYERS=$LAYERS (total; $WATERS_LAYERS_PER_RUN per cycle)"
-log "MD_DURATION=$MD_DURATION ns (final cycle)"
+log "LAYERS=$LAYERS (one layer per iteration -> $ITERATIONS iterations)"
+log "REFINEMENT=$REFINEMENT"
+log "INTERMEDIATE_MD_NS=$INTERMEDIATE_MD_NS ns (per_layer intermediate iterations)"
+log "FINAL_MD_NS=$FINAL_MD_NS ns (final iteration)"
 log "INPUT_DIR=$INPUT_DIR"
 log "REFERENCE_PDB(optional)=$REFERENCE_PDB"
 validate_script_dir_not_input_dir "$1"
@@ -239,14 +254,25 @@ CURRENT_IN="$INPUT_FILE"
 for ((I = 1; I <= ITERATIONS; I++)); do
   log "===== ITERATION $I/$ITERATIONS ====="
 
-  # MD (and the MobyWat it feeds) runs only on the final iteration; the backend
-  # decides this from the duration: >0 runs MD + MobyWat, 0 skips both.
+  # MobyWat runs only on the final iteration. MD runs on the final iteration always,
+  # and on intermediate iterations only in per_layer mode (with a positive duration).
+  # The backend gates MD on the duration (>0) and MobyWat on the RUN_MOBYWAT flag.
   if (( I == ITERATIONS )); then
-    CYCLE_MD_DURATION=$MD_DURATION
-    log "Iteration $I/$ITERATIONS: final iteration — wdrop + minimize + MD ($MD_DURATION ns) + MobyWat"
+    CYCLE_MD_DURATION=$FINAL_MD_NS
+    RUN_MOBYWAT=1
+    log "Iteration $I/$ITERATIONS: final iteration — wdrop + minimize + MD ($FINAL_MD_NS ns) + MobyWat"
+  elif [[ "$REFINEMENT" == "per_layer" ]]; then
+    CYCLE_MD_DURATION=$INTERMEDIATE_MD_NS
+    RUN_MOBYWAT=0
+    if md_enabled "$INTERMEDIATE_MD_NS"; then
+      log "Iteration $I/$ITERATIONS: intermediate iteration (per_layer) — wdrop + minimize + MD ($INTERMEDIATE_MD_NS ns), no MobyWat"
+    else
+      log "Iteration $I/$ITERATIONS: intermediate iteration (per_layer, intermediate MD disabled) — wdrop + minimize only"
+    fi
   else
     CYCLE_MD_DURATION=0
-    log "Iteration $I/$ITERATIONS: intermediate iteration — wdrop + minimize only, no MD"
+    RUN_MOBYWAT=0
+    log "Iteration $I/$ITERATIONS: intermediate iteration (default) — wdrop + minimize only, no MD"
   fi
 
   if (( ITERATIONS > 1 )); then
@@ -257,7 +283,7 @@ for ((I = 1; I <= ITERATIONS; I++)); do
   mkdir -p -- "$RUN_DIR"
   log "Run directory: $RUN_DIR"
 
-  run_wdrop_and_mm "$CURRENT_IN" "$WATERS_LAYERS_PER_RUN" "$CYCLE_MD_DURATION" "$REFERENCE_PDB"
+  run_wdrop_and_mm "$CURRENT_IN" "$WATERS_LAYERS_PER_RUN" "$CYCLE_MD_DURATION" "$REFERENCE_PDB" "$RUN_MOBYWAT"
 
   move_everything_except "$RUN_DIR" "${BASE_WHITELIST[@]}"
   require_file "$RUN_DIR/$(basename "$LAST_MM_OUT")" "moved MM result"

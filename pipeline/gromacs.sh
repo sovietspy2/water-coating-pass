@@ -27,9 +27,10 @@ steps_to_ps() {
   }'
 }
 
-if [[ $# -lt 2 || $# -gt 4 ]]; then
-  echo "Usage: $0 <input.pdb> <md_duration_ns> <target_frames> <reference.pdb>" >&2
-  echo "  md_duration_ns > 0 runs MD + MobyWat; 0 skips both (minimize only)." >&2
+if [[ $# -lt 2 || $# -gt 5 ]]; then
+  echo "Usage: $0 <input.pdb> <md_duration_ns> <target_frames> <reference.pdb> <run_mobywat>" >&2
+  echo "  md_duration_ns > 0 runs MD; 0 skips it (minimize only)." >&2
+  echo "  run_mobywat (default 1): 1 runs MobyWat after MD; 0 skips it (intermediate cycle)." >&2
   exit 1
 fi
 
@@ -46,6 +47,7 @@ PDB_NAME="$(basename "${INPUT_ABS%.pdb}")"
 MD_DURATION="$2"
 TARGET_FRAMES="${3:-1000}"
 REFERENCE_PDB="${4:-}"
+RUN_MOBYWAT="${5:-1}" # 1 = run MobyWat after MD (final cycle); 0 = skip (intermediate cycle)
 DT_PS="0.001" # 1 femtosecond
 
 # Setup logging in the INPUT_DIR (output directory)
@@ -58,6 +60,7 @@ log "INPUT_ABS=$INPUT_ABS"
 log "INPUT_DIR=$INPUT_DIR"
 log "MD_DURATION=$MD_DURATION ns"
 log "TARGET_FRAMES=$TARGET_FRAMES"
+log "RUN_MOBYWAT=$RUN_MOBYWAT"
 log "DT_PS=$DT_PS"
 
 touch "${INPUT_DIR}/GROMACS.protocol"
@@ -269,8 +272,12 @@ fi
 log "Step 7: Post processing PDB"
 run_step "$SCRIPT_DIR"/format_pdb.py "$INPUT_DIR/next_step.pdb"
 
-if ! md_enabled "$MD_DURATION"; then
-  log "MD disabled (MD_DURATION=0); skipping trajectory PDB generation and MobyWat"
+if ! should_run_mobywat "$MD_DURATION" "$RUN_MOBYWAT"; then
+  if ! md_enabled "$MD_DURATION"; then
+    log "MD disabled (MD_DURATION=0); skipping trajectory PDB generation and MobyWat"
+  else
+    log "Intermediate cycle (RUN_MOBYWAT=0); MD ran but skipping trajectory PDB generation and MobyWat"
+  fi
   log "gromacs.sh completed successfully"
   exit 0
 fi
