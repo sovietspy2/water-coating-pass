@@ -26,19 +26,19 @@ Output is written as `<input_base>_<N>WAT.pdb` in the same directory as the inpu
 ## Running the full pipeline
 
 ```bash
-./pipeline/wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--layers L] [--refinement default|per_layer] [--intermediate-md-ns NS] [--final-md-ns NS]
+./pipeline/wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--layers L] [--intermediate-md-ns NS] [--final-md-ns NS]
 # MODE: gromacs | tinker
 # --layers L: number of water layers (default 5); one layer is deposited+minimized per iteration, so L is also the iteration count
-# --refinement MODE: 'default' runs MD only on the final iteration; 'per_layer' runs MD after each iteration (default 'default')
-# --intermediate-md-ns NS: MD length in ns for intermediate iterations in per_layer mode (default 0.1); 0 disables intermediate MD
-# --final-md-ns NS: MD length in ns for the final iteration (default 0.5); must be > 0
+# --intermediate-md-ns NS: MD length in ns run after each intermediate iteration (default 0); 0 = no intermediate MD (minimize only)
+# --final-md-ns NS: MD length in ns for the final iteration (default 0.1); must be > 0
 ```
 
 - Iterations are no longer a separate flag: `--layers L` deposits exactly one layer per iteration, so the run is always `L` deposit+minimize iterations, feeding each minimized output into the next → output directory `<base>_l<L>_<refinement>/{1..L}/` (single directory when `L == 1`).
-- `--refinement default` (`--layers 5`): 5 iterations of 1 layer each; iterations 1–4 are minimize-only, iteration 5 adds MD (`--final-md-ns`) + MobyWat.
-- `--refinement per_layer`: every iteration runs MD; intermediate iterations use `--intermediate-md-ns` (skipped when it is `0`), the final iteration uses `--final-md-ns`.
-- **MobyWat runs strictly on the final iteration only**, regardless of refinement mode.
-- Backends receive two independent controls: MD is gated on the per-cycle duration being `> 0`, and MobyWat is gated on a separate `run_mobywat` flag (`1` only on the final iteration). This lets per_layer intermediate iterations run MD without MobyWat.
+- **`--intermediate-md-ns` is the single knob for intermediate MD** (there is no `--refinement` flag): intermediate iterations run MD iff `--intermediate-md-ns > 0`. `0` (the default) = intermediate iterations are minimize-only.
+- The final iteration always runs MD (`--final-md-ns`, must be `> 0`) + MobyWat, regardless of the intermediate setting.
+- **MobyWat runs strictly on the final iteration only.**
+- `<refinement>` in the output-dir name is a **derived label**, not a flag: `default` when `--intermediate-md-ns == 0`, `per_layer` when `> 0`.
+- Backends receive two independent controls: MD is gated on the per-cycle duration being `> 0`, and MobyWat is gated on a separate `run_mobywat` flag (`1` only on the final iteration). This lets intermediate iterations run MD without MobyWat.
 
 The input PDB **must be in its own working directory** outside the project folder.
 
@@ -89,11 +89,11 @@ Global state lives in `main.c` as `g_`-prefixed variables (e.g. `g_pdb_ref`, `g_
 ### Pipeline scripts (`pipeline/`)
 
 - **`pipeline_common.sh`** — sourced by all pipeline scripts. Provides `log()`, `run_step()`, `setup_logging()`, `normalize_input_pdb()`, `make_output_dir()`, `validate_script_dir_not_input_dir()`, `run_mm_step()`.
-- **`wdrop.sh`** — orchestrates the per-layer deposit+minimize loop (`--layers` iterations, one layer each): model reduction → PDB fix (Python) → iterative wdrop + MM/MD → file collection. `--refinement` selects whether MD runs every iteration or only the last; `--intermediate-md-ns`/`--final-md-ns` set the two MD lengths.
+- **`wdrop.sh`** — orchestrates the per-layer deposit+minimize loop (`--layers` iterations, one layer each): model reduction → PDB fix (Python) → iterative wdrop + MM/MD → file collection. `--intermediate-md-ns` sets the intermediate MD length (`0` = none, the default) and `--final-md-ns` the final one; the `default`/`per_layer` label is derived from whether `--intermediate-md-ns > 0`.
 - **`gromacs.sh`** / **`tinker.sh`** — backend-specific MM+MD steps; write `next_step.pdb` on success. `tinker.sh` supports Tinker9-GPU: export `TINKER_GPU=1` to run the MD step with `dynamic9` instead of `dynamic` (file-format utilities `pdbxyz`/`arcedit`/`xyzpdb` are unchanged); GPU mode also injects `INTEGRATOR VERLET` + `REMOVE-INERTIA 0` into `md.key`.
 - **`pdb-preprocessor.py`** — fixes missing residues/atoms and nonstandard residues in X-ray PDBs (uses pdbfixer). Mode is selected by a required flag: `--target` strips all waters and heterogens (used by `wdrop.sh`); `--reference` keeps waters but removes other heterogens (used by `gromacs.sh`/`tinker.sh` for MobyWat validation).
 - **`format_pdb.py`** — rewrites a PDB into canonical fixed-width columns (removes CONECT, renames OW→O, maps residue names 001/002/SOL→WAT), backing the original up to `<stem>.original.pdb`. Called by both backends before/after MD. Its coordinate parser anchors decimals to exactly 3 fractional digits (`%8.3f`), so it correctly reads touching fixed-width fields (GROMACS pseudo-PBC coords ~5000 Å) and widened/stuck fields (Tinker `xyzpdb` `%9.3f` frames) alike. Per-row change detail in the rewrite log is capped at `_DETAIL_LOG_CAP` (1000 rows) so multi-thousand-frame trajectories don't produce huge logs; summary counts remain exact. Tests in `testing/format-pdb-test/`.
-- **`research.sh`** — batch benchmark + report generator. Takes `<INPUT_DIR> <OUTPUT_DIR>`, and for every `.pdb` in the input dir runs all four pipeline combos (`tinker i1`, `tinker i5`, `gromacs i1`, `gromacs i5`), each in its own working dir, distilling runtime, MobyWat SR values, and C-alpha RMSD into a shared `research_report.md`. Downloads nothing (files are provided/reviewed manually); honors `TINKER_GPU=1`.
+- **`research.sh`** — batch benchmark + CSV history generator. Takes `<INPUT_DIR> <OUTPUT_DIR>`, and for every `.pdb` in the input dir runs each combo in its `COMBOS` array, each in its own working dir. Each `COMBOS` entry is a full `wdrop.sh` invocation — the engine (`tinker`|`gromacs`) followed by any `wdrop.sh` flags (`--layers`, `--intermediate-md-ns`, `--final-md-ns`); omitted flags fall back to `wdrop.sh` defaults. The combo string is slugged into a unique per-combo working dir, and the analysis dir is derived from the resolved `--layers` and the derived `default`/`per_layer` label. Each run appends **one row per PDB × combo** to an **append-only, committed CSV history** — `testing/research_history.csv` by default, overridable via the `RESEARCH_CSV` env var. The file is never truncated (it's the long-term performance record for later DB import); the header is written only when the file is missing/empty. Columns: `id` (auto-increment across runs), `pdb_name`, `engine`, the four wdrop params, `total_runtime_seconds`, `rmsd_avg`/`rmsd_max`, `sr_mer`/`sr_ida`/`sr_ide`/`sr_pos`, `run_timestamp` (ISO 8601 UTC), `commit_hash`, and `cpu`/`gpu` (from the `CPU`/`GPU` env vars, `UNKNOWN` when unset). Missing metrics are left empty. Downloads nothing (files are provided/reviewed manually); honors `TINKER_GPU=1`.
 - **`add-mobywat-analysis-params.sh`** / **`remove-ter-id.sh`** — small helpers for the reference PDB: the first prepends MobyWat `REMARK mobywat_*` tuning params; the second normalizes `TER` records and renumbers atoms.
 
 The pipeline auto-creates `.venv` in the repo root if absent, activates it, and uses it for all Python calls. All shell scripts use `set -euo pipefail`.

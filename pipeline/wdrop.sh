@@ -8,10 +8,10 @@ echo "  \ \/  \/ / | |  | |  _  /| |  | |  ___/ "
 echo "   \  /\  /  | |__| | | \ \| |__| | |     "
 echo "    \/  \/   |_____/|_|  \_\\____/|_|     "
 
-# Usage: ./wdrop.sh INPUT_PDB MODE [REFERENCE_PDB] [--layers L] [--refinement default|per_layer] [--intermediate-md-ns NS] [--final-md-ns NS]
+# Usage: ./wdrop.sh INPUT_PDB MODE [REFERENCE_PDB] [--layers L] [--intermediate-md-ns NS] [--final-md-ns NS]
 # Example prediciton mode: ./wdrop.sh /abs/path/ASD.pdb gromacs --layers 5
 # Example validation mode: ./wdrop.sh /abs/path/ASD.pdb gromacs /abs/path/ASD_crsyst.pdb --layers 5
-# Example per-layer MD:    ./wdrop.sh /abs/path/ASD.pdb tinker --refinement per_layer --intermediate-md-ns 0.1 --final-md-ns 0.5
+# Example per-layer MD:    ./wdrop.sh /abs/path/ASD.pdb tinker --intermediate-md-ns 0.1 --final-md-ns 0.5
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/pipeline_common.sh"
@@ -31,13 +31,12 @@ source "$VENV_DIR/bin/activate"
 SECONDS=0
 
 usage() {
-  echo "Usage: $0 <INPUT_PDB> <MODE> [REFERENCE_PDB] [--layers L] [--refinement default|per_layer] [--intermediate-md-ns NS] [--final-md-ns NS]" >&2
+  echo "Usage: $0 <INPUT_PDB> <MODE> [REFERENCE_PDB] [--layers L] [--intermediate-md-ns NS] [--final-md-ns NS]" >&2
   echo "Input PDB: mandatory, used for mobywat prediction mode" >&2
   echo "Modes: gromacs, tinker" >&2
   echo "--layers L: number of water layers (default 5); one layer is deposited+minimized per iteration, so L is also the iteration count" >&2
-  echo "--refinement MODE: 'default' runs MD only on the final iteration; 'per_layer' runs MD after each iteration (default 'default')" >&2
-  echo "--intermediate-md-ns NS: MD length in ns for intermediate iterations in per_layer mode (default 0.1); 0 disables intermediate MD" >&2
-  echo "--final-md-ns NS: MD length in ns for the final iteration (default 0.5); must be > 0" >&2
+  echo "--intermediate-md-ns NS: MD length in ns run after each intermediate iteration (default 0); 0 = no intermediate MD (minimize only)" >&2
+  echo "--final-md-ns NS: MD length in ns for the final iteration (default 0.1); must be > 0" >&2
   echo "Reference PDB: (optional) for mobywat validaiton mode" >&2
   exit 1
 }
@@ -125,12 +124,11 @@ on_exit() {
 trap on_error ERR
 trap on_exit EXIT
 
-# Parse --layers/--refinement/--intermediate-md-ns/--final-md-ns flags (accepted in
-# any position) and the positionals: INPUT_PDB (1), MODE (2), REFERENCE_PDB (3, optional).
+# Parse --layers/--intermediate-md-ns/--final-md-ns flags (accepted in any position)
+# and the positionals: INPUT_PDB (1), MODE (2), REFERENCE_PDB (3, optional).
 LAYERS=5
-REFINEMENT="default"           # default | per_layer
-INTERMEDIATE_MD_NS="0.1"        # MD length in ns for intermediate iterations (per_layer only); 0 disables it
-FINAL_MD_NS="0.5"               # MD length in ns for the final iteration; must be > 0
+INTERMEDIATE_MD_NS="0"          # MD length in ns run after each intermediate iteration; 0 = none (minimize only)
+FINAL_MD_NS="0.1"               # MD length in ns for the final iteration; must be > 0
 POSITIONAL=()
 while (( $# )); do
   case "$1" in
@@ -138,10 +136,6 @@ while (( $# )); do
       [[ $# -ge 2 ]] || { echo "Error: --layers requires a value" >&2; usage; }
       LAYERS="$2"; shift 2 ;;
     --layers=*)     LAYERS="${1#*=}"; shift ;;
-    --refinement)
-      [[ $# -ge 2 ]] || { echo "Error: --refinement requires a value" >&2; usage; }
-      REFINEMENT="$2"; shift 2 ;;
-    --refinement=*) REFINEMENT="${1#*=}"; shift ;;
     --intermediate-md-ns)
       [[ $# -ge 2 ]] || { echo "Error: --intermediate-md-ns requires a value" >&2; usage; }
       INTERMEDIATE_MD_NS="$2"; shift 2 ;;
@@ -185,15 +179,9 @@ esac
 [[ "$LAYERS" =~ ^[1-9][0-9]*$ ]] || {
   echo "Error: --layers must be a positive integer (got '$LAYERS')" >&2; exit 1; }
 
-# --refinement selects when MD runs: 'default' = only the final iteration;
-# 'per_layer' = after every iteration.
-case "$REFINEMENT" in
-  default|per_layer) ;;
-  *) echo "Error: --refinement must be 'default' or 'per_layer' (got '$REFINEMENT')" >&2; exit 1 ;;
-esac
-
-# --intermediate-md-ns = MD length in ns for intermediate iterations in per_layer
-# mode. Non-negative decimal; 0 disables intermediate MD (deposit + minimize only).
+# --intermediate-md-ns = MD length in ns run after each intermediate iteration.
+# Non-negative decimal; 0 = no intermediate MD (deposit + minimize only). This single
+# knob decides whether intermediate iterations run MD — there is no separate mode flag.
 [[ "$INTERMEDIATE_MD_NS" =~ ^[0-9]+(\.[0-9]+)?$ ]] || {
   echo "Error: --intermediate-md-ns must be a non-negative number in ns (got '$INTERMEDIATE_MD_NS')" >&2; exit 1; }
 
@@ -205,6 +193,15 @@ esac
 
 readonly ITERATIONS="$LAYERS" # one layer deposited per iteration
 readonly WATERS_LAYERS_PER_RUN=1
+
+# REFINEMENT is a derived label (not a flag): 'per_layer' when intermediate MD runs
+# (--intermediate-md-ns > 0), 'default' when it does not. Used only for output-dir
+# naming and logging.
+if md_enabled "$INTERMEDIATE_MD_NS"; then
+  REFINEMENT="per_layer"
+else
+  REFINEMENT="default"
+fi
 readonly LAYERS REFINEMENT INTERMEDIATE_MD_NS FINAL_MD_NS
 readonly OUTPUT_TAG="_l${LAYERS}_${REFINEMENT}"
 
@@ -214,8 +211,7 @@ log "Starting wdrop pipeline"
 log "INPUT_PDB=$INPUT_PDB"
 log "MODE=$MODE"
 log "LAYERS=$LAYERS (one layer per iteration -> $ITERATIONS iterations)"
-log "REFINEMENT=$REFINEMENT"
-log "INTERMEDIATE_MD_NS=$INTERMEDIATE_MD_NS ns (per_layer intermediate iterations)"
+log "INTERMEDIATE_MD_NS=$INTERMEDIATE_MD_NS ns (intermediate iterations; 0 = none) -> refinement label '$REFINEMENT'"
 log "FINAL_MD_NS=$FINAL_MD_NS ns (final iteration)"
 log "INPUT_DIR=$INPUT_DIR"
 log "REFERENCE_PDB(optional)=$REFERENCE_PDB"
@@ -254,25 +250,21 @@ CURRENT_IN="$INPUT_FILE"
 for ((I = 1; I <= ITERATIONS; I++)); do
   log "===== ITERATION $I/$ITERATIONS ====="
 
-  # MobyWat runs only on the final iteration. MD runs on the final iteration always,
-  # and on intermediate iterations only in per_layer mode (with a positive duration).
+  # MobyWat runs only on the final iteration. The final iteration always runs MD
+  # (--final-md-ns); intermediate iterations run MD iff --intermediate-md-ns > 0.
   # The backend gates MD on the duration (>0) and MobyWat on the RUN_MOBYWAT flag.
   if (( I == ITERATIONS )); then
     CYCLE_MD_DURATION=$FINAL_MD_NS
     RUN_MOBYWAT=1
     log "Iteration $I/$ITERATIONS: final iteration — wdrop + minimize + MD ($FINAL_MD_NS ns) + MobyWat"
-  elif [[ "$REFINEMENT" == "per_layer" ]]; then
+  else
     CYCLE_MD_DURATION=$INTERMEDIATE_MD_NS
     RUN_MOBYWAT=0
     if md_enabled "$INTERMEDIATE_MD_NS"; then
-      log "Iteration $I/$ITERATIONS: intermediate iteration (per_layer) — wdrop + minimize + MD ($INTERMEDIATE_MD_NS ns), no MobyWat"
+      log "Iteration $I/$ITERATIONS: intermediate iteration — wdrop + minimize + MD ($INTERMEDIATE_MD_NS ns), no MobyWat"
     else
-      log "Iteration $I/$ITERATIONS: intermediate iteration (per_layer, intermediate MD disabled) — wdrop + minimize only"
+      log "Iteration $I/$ITERATIONS: intermediate iteration — wdrop + minimize only, no MD"
     fi
-  else
-    CYCLE_MD_DURATION=0
-    RUN_MOBYWAT=0
-    log "Iteration $I/$ITERATIONS: intermediate iteration (default) — wdrop + minimize only, no MD"
   fi
 
   if (( ITERATIONS > 1 )); then

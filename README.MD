@@ -9,7 +9,7 @@ environment, and external MM/MD engines. Every box below must be available:
    wdrop.sh   (Bash orchestrator; sources pipeline_common.sh)
       |
       |   loops L iterations (one water layer each):  deposit water  -->  minimize
-      |   per_layer refinement also runs a short MD each iteration;
+      |   with --intermediate-md-ns > 0 each iteration also runs a short MD;
       |   the final iteration always runs   MD  -->  MobyWat
       |
       +-- [1] preprocess ----> pdb-preprocessor.py ----> Python venv (.venv) + pdbfixer
@@ -50,12 +50,12 @@ The project includes user-facing pipeline script in `pipeline/`:
 
 # wdrop.sh
 
-`wdrop.sh` is a Bash pipeline wrapper for running `wdrop` and molecular mechanics minimization on a PDB file. It deposits water layers around the protein one layer at a time and relaxes the structure over a deposit-and-minimize iteration per layer, controlled by the `--layers` and `--refinement` flags.
+`wdrop.sh` is a Bash pipeline wrapper for running `wdrop` and molecular mechanics minimization on a PDB file. It deposits water layers around the protein one layer at a time and relaxes the structure over a deposit-and-minimize iteration per layer, controlled by the `--layers`, `--intermediate-md-ns`, and `--final-md-ns` flags.
 
 ## Usage
 
 ```bash
-./wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--layers L] [--refinement default|per_layer] [--intermediate-md-ns NS] [--final-md-ns NS]
+./wdrop.sh <INPUT_PDB> <MODE> [REFERENCE_PDB] [--layers L] [--intermediate-md-ns NS] [--final-md-ns NS]
 ```
 
 Examples:
@@ -66,13 +66,13 @@ Examples:
 ```
 
 ```bash
-# Refine after every layer: MD runs each iteration (0.1 ns), the final iteration runs 0.5 ns + MobyWat
-./wdrop.sh /tmp/working_dir/1PSV.pdb tinker --refinement per_layer --intermediate-md-ns 0.1 --final-md-ns 0.5
+# Refine after every layer: a short MD (0.1 ns) runs each intermediate iteration, the final iteration runs 0.5 ns + MobyWat
+./wdrop.sh /tmp/working_dir/1PSV.pdb tinker --intermediate-md-ns 0.1 --final-md-ns 0.5
 ```
 
 ```bash
-# Turn intermediate MD off but keep per-layer minimization; only the last iteration runs MD (0.5 ns) + MobyWat
-./wdrop.sh /tmp/working_dir/1PSV.pdb tinker --refinement per_layer --intermediate-md-ns 0 --final-md-ns 0.5
+# No intermediate MD (the default): only the last iteration runs MD (0.5 ns) + MobyWat
+./wdrop.sh /tmp/working_dir/1PSV.pdb tinker --intermediate-md-ns 0 --final-md-ns 0.5
 ```
 
 ```bash
@@ -87,36 +87,35 @@ Note: Place the input PDB in its own working directory located outside the proje
 - `MODE` — Minimization backend, either `gromacs` or `tinker`.
 - `REFERENCE_PDB` — Absolute or relative path to a `.pdb` file used as the reference structure (it already contains waters), enabling MobyWat validation mode. Optional.
 - `--layers L` — Number of `wdrop` water layers to deposit (default `5`). One layer is deposited and minimized per iteration, so `L` is also the iteration count.
-- `--refinement MODE` — `default` runs MD only on the final iteration; `per_layer` runs MD after every iteration (default `default`).
-- `--intermediate-md-ns NS` — MD length in nanoseconds for the intermediate iterations in `per_layer` mode (default `0.1`). May be `0` to disable intermediate MD (minimize only). Ignored in `default` mode.
-- `--final-md-ns NS` — MD length in nanoseconds for the final iteration (default `0.5`). Must be a positive number (`> 0`).
+- `--intermediate-md-ns NS` — MD length in nanoseconds run after each intermediate iteration (default `0`). `0` means no intermediate MD (minimize only); any value `> 0` runs an MD of that length on every intermediate iteration. This single knob decides whether intermediate iterations run MD — there is no separate mode flag.
+- `--final-md-ns NS` — MD length in nanoseconds for the final iteration (default `0.1`). Must be a positive number (`> 0`).
 
-## Layers, refinement, and MD
+## Layers and MD
 
 Each run deposits `--layers` water layers, one per deposit-and-minimize iteration. Each iteration's minimized structure is stored in a numbered subdirectory and fed into the next iteration.
 
-- **`--refinement default`** — intermediate iterations run `wdrop` + energy minimization only (**no MD**); the final iteration runs `wdrop`, minimization, MD (`--final-md-ns`), and MobyWat.
-- **`--refinement per_layer`** — every iteration additionally runs MD. Intermediate iterations use `--intermediate-md-ns` (skipped when it is `0`), and the final iteration uses `--final-md-ns`.
-- **MobyWat always runs strictly on the final iteration**, in both refinement modes.
+- **Intermediate iterations** run `wdrop` + energy minimization, and additionally an MD of `--intermediate-md-ns` when that value is `> 0` (no MD when it is `0`, the default).
+- **The final iteration** always runs `wdrop`, minimization, MD (`--final-md-ns`), and MobyWat.
+- **MobyWat always runs strictly on the final iteration.**
 
-The two MD lengths are controlled independently, so intermediate MD can be tuned or switched off (`--intermediate-md-ns 0`) without affecting the final production MD.
+The two MD lengths are controlled independently, so intermediate MD can be tuned or switched off (`--intermediate-md-ns 0`) without affecting the final production MD. Output directories are labelled `default` when `--intermediate-md-ns` is `0` and `per_layer` when it is `> 0`.
 
 Examples:
 
-- Default (`--layers 5`, `--refinement default`): 5 iterations of 1 layer each; iterations 1–4 are minimize-only, iteration 5 adds MD + MobyWat.
-- `--layers 5 --refinement per_layer`: iterations 1–4 run minimize + a short MD, iteration 5 runs the longer MD + MobyWat.
+- Default (`--layers 5`, `--intermediate-md-ns 0`): 5 iterations of 1 layer each; iterations 1–4 are minimize-only, iteration 5 adds MD + MobyWat.
+- `--layers 5 --intermediate-md-ns 0.1`: iterations 1–4 run minimize + a short (0.1 ns) MD, iteration 5 runs the longer MD + MobyWat.
 
 ## Output
 
 - Log file: `application.LOG` in the input file directory.
-- Output directory: `<input_base>_l<layers>_<refinement>` (e.g. `1PSV_l5_default`, `1PSV_l5_per_layer`).
+- Output directory: `<input_base>_l<layers>_<refinement>`, where `<refinement>` is the derived label (`default` when `--intermediate-md-ns 0`, `per_layer` when `> 0`) — e.g. `1PSV_l5_default`, `1PSV_l5_per_layer`.
 - Each iteration is stored in a numbered subdirectory: `<input_base>_l5_default/1` ... `<input_base>_l5_default/5` (a single directory is used when `--layers 1`).
 
 ## Workflow
 
 1. Validate arguments and normalize the input PDB path.
 2. Fix the input PDB (add missing atoms/residues), strip existing waters, and reduce it to a single model.
-3. For each iteration: run `wdrop` to deposit one water layer, then minimize with the selected backend. In `per_layer` mode each iteration also runs an intermediate MD; the final iteration always runs MD and MobyWat.
+3. For each iteration: run `wdrop` to deposit one water layer, then minimize with the selected backend. When `--intermediate-md-ns > 0`, each intermediate iteration also runs an MD; the final iteration always runs MD and MobyWat.
 4. Collect and organize each iteration's output files into its run directory.
 5. Write progress and runtime information to `application.LOG`.
 
@@ -134,7 +133,7 @@ It also expects the `wdrop` executable to be available in `PATH`.
 ## Notes
 
 - The script uses strict Bash mode: `set -euo pipefail`.
-- `--layers`, `--refinement`, `--intermediate-md-ns`, and `--final-md-ns` may appear in any order, before or after the positional arguments.
+- `--layers`, `--intermediate-md-ns`, and `--final-md-ns` may appear in any order, before or after the positional arguments.
 - Existing `application.LOG` is reused and appended to, not truncated.
 
 ## Exit behavior

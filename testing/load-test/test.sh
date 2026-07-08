@@ -16,7 +16,9 @@ set -euo pipefail
 #   -n, --num-tests NUM        Number of test iterations to run (default: 10)
 #   -p, --path PATH            Base path for test directories (default: ./test_runs)
 #   -m, --mode MODE            Mode to test: tinker, gromacs, or all (default: all)
-#   -t, --type TYPE            Refinement to test: default, per_layer, or all (default: all)
+#   -t, --type TYPE            Intermediate-MD preset to test: default (no
+#                              intermediate MD), per_layer (0.1 ns), a raw ns
+#                              value, or all (default: all)
 #   -l, --loop                 Run each mode/type combination sequentially in an
 #                              infinite loop until stopped
 #   -h, --help                 Show this help message
@@ -68,8 +70,9 @@ Options:
                              (default: ./test_runs)
   -m, --mode MODE            Mode to test: tinker, gromacs, or all
                              (default: all)
-  -t, --type TYPE            Refinement to test: default, per_layer, or all
-                             (default: all)
+  -t, --type TYPE            Intermediate-MD preset to test: default (no
+                             intermediate MD), per_layer (0.1 ns), a raw ns
+                             value, or all (default: all)
   -l, --loop                 Run each mode/type combination sequentially in an
                              infinite loop until stopped
   -h, --help                 Show this help message
@@ -299,7 +302,16 @@ run_single_test_body() {
   local test_start
   test_start=$(date +%s)
 
-  local cmd=("$SCRIPT" "$pdb_file" "$mode" "--refinement" "$test_type")
+  # Translate the friendly type label into an --intermediate-md-ns value. 'default'
+  # = no intermediate MD (0), 'per_layer' = 0.1 ns; anything else is taken as a raw
+  # ns value (so -t 0.05 works too). wdrop derives its own default/per_layer label.
+  local intermediate_ns
+  case "$test_type" in
+    default)   intermediate_ns="0" ;;
+    per_layer) intermediate_ns="0.1" ;;
+    *)         intermediate_ns="$test_type" ;;
+  esac
+  local cmd=("$SCRIPT" "$pdb_file" "$mode" "--intermediate-md-ns" "$intermediate_ns")
   if [[ -n "$REFERENCE_PDB_URL" ]]; then
     cmd+=("$reference_pdb_file")
   fi
