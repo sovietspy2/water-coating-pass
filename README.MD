@@ -98,7 +98,7 @@ Each run deposits `--layers` water layers, one per deposit-and-minimize iteratio
 - **The final iteration** always runs `wdrop`, minimization, MD (`--final-md-ns`), and MobyWat.
 - **MobyWat always runs strictly on the final iteration.**
 
-The two MD lengths are controlled independently, so intermediate MD can be tuned or switched off (`--intermediate-md-ns 0`) without affecting the final production MD. Output directories are labelled `default` when `--intermediate-md-ns` is `0` and `per_layer` when it is `> 0`.
+The two MD lengths are controlled independently, so intermediate MD can be tuned or switched off (`--intermediate-md-ns 0`) without affecting the final production MD. The output directory name encodes both MD lengths (see Output below).
 
 Examples:
 
@@ -108,8 +108,8 @@ Examples:
 ## Output
 
 - Log file: `application.LOG` in the input file directory.
-- Output directory: `<input_base>_l<layers>_<refinement>`, where `<refinement>` is the derived label (`default` when `--intermediate-md-ns 0`, `per_layer` when `> 0`) — e.g. `1PSV_l5_default`, `1PSV_l5_per_layer`.
-- Each iteration is stored in a numbered subdirectory: `<input_base>_l5_default/1` ... `<input_base>_l5_default/5` (a single directory is used when `--layers 1`).
+- Output directory: `<input_base>_l<layers>_int<intermediate_md_ns>_fin<final_md_ns>` — e.g. `1PSV_l5_int0_fin0.1`, `1PSV_l5_int0.1_fin0.5`.
+- Each iteration is stored in a numbered subdirectory: `<input_base>_l5_int0_fin0.1/1` ... `<input_base>_l5_int0_fin0.1/5` (a single directory is used when `--layers 1`).
 
 ## Workflow
 

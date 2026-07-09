@@ -1,2 +1,1 @@
-id,pdb_name,engine,layers,refinement,intermediate_md_ns,final_md_ns,total_runtime_seconds,rmsd_avg,rmsd_max,sr_mer,sr_ida,sr_ide,sr_pos,run_timestamp,commit_hash,cpu,gpu
---intermediate-md-ns
+id,pdb_name,engine,layers,intermediate_md_ns,final_md_ns,total_runtime_seconds,rmsd_avg,rmsd_max,sr_mer,sr_ida,sr_ide,sr_pos,failure,run_timestamp,commit_hash,cpu,gpu

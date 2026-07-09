@@ -8,22 +8,24 @@
 # invocation: the engine (tinker|gromacs) followed by any wdrop.sh flags, e.g.
 #   tinker --layers 5 --intermediate-md-ns 0.1 --final-md-ns 0.5
 # Edit COMBOS to define the runs you want.
-# Each combo runs in its OWN working directory (the _l{L}_{refinement} output tags
-# collide between combos, and each combo needs its own application.LOG for runtime
-# extraction). To run Tinker in GPU mode, export TINKER_GPU=1 before invoking
+# Each combo runs in its OWN working directory (the _l{L}_int{INT}_fin{FIN} output
+# tags can coincide between combos, and each combo needs its own application.LOG for
+# runtime extraction). To run Tinker in GPU mode, export TINKER_GPU=1 before invoking
 # this script.
 #
 # Results are appended as rows to a single committed, append-only CSV history
 # (testing/research_history.csv by default; override with RESEARCH_CSV). The file
 # is NEVER truncated — it is the long-term performance record, meant to be bulk-
 # loaded into a DB. One row is written per PDB x combo, with columns:
-#   id, pdb_name, engine, layers, refinement, intermediate_md_ns, final_md_ns,
+#   id, pdb_name, engine, layers, intermediate_md_ns, final_md_ns,
 #   total_runtime_seconds, rmsd_avg, rmsd_max, sr_mer, sr_ida, sr_ide, sr_pos,
-#   run_timestamp, commit_hash, cpu, gpu
+#   failure, run_timestamp, commit_hash, cpu, gpu
 # Metrics come from: total runtime (last "Total runtime was N seconds" line of
 # application.LOG), avg/max C-alpha RMSD from O_system_rmst.txt, and the final SR
 # value from each O_system_mt{MER,IDa,IDe,POS}.lst. Missing metrics are left empty.
-# cpu/gpu come from the CPU/GPU env vars (UNKNOWN when unset).
+# failure is 1 when any of the six result metrics (rmsd_avg/rmsd_max + the four SR
+# values) is empty (no usable result), else 0. cpu/gpu come from the CPU/GPU env
+# vars (UNKNOWN when unset).
 #
 # Usage:
 #   ./pipeline/research.sh <INPUT_DIR> <OUTPUT_DIR>
@@ -65,7 +67,7 @@ RESEARCH_CSV="${RESEARCH_CSV:-$SCRIPT_DIR/../testing/research_history.csv}"
 mkdir -p "$(dirname "$RESEARCH_CSV")"
 RESEARCH_CSV="$(cd "$(dirname "$RESEARCH_CSV")" && pwd)/$(basename "$RESEARCH_CSV")"
 
-CSV_HEADER="id,pdb_name,engine,layers,refinement,intermediate_md_ns,final_md_ns,total_runtime_seconds,rmsd_avg,rmsd_max,sr_mer,sr_ida,sr_ide,sr_pos,run_timestamp,commit_hash,cpu,gpu"
+CSV_HEADER="id,pdb_name,engine,layers,intermediate_md_ns,final_md_ns,total_runtime_seconds,rmsd_avg,rmsd_max,sr_mer,sr_ida,sr_ide,sr_pos,failure,run_timestamp,commit_hash,cpu,gpu"
 
 # Collect the .pdb files to process (top level of INPUT_DIR only).
 PDB_FILES=()
@@ -151,12 +153,12 @@ sr_value() {
 # ----------------------------------------------------------------------------
 # Append one combo's result as a CSV row. Uses the run-level constants
 # COMMIT_HASH, CPU_INFO, GPU_INFO and the CSV_NEXT_ID counter (incremented here).
-#   $1 pdb_name  $2 engine  $3 layers  $4 refinement
-#   $5 intermediate_md_ns  $6 final_md_ns  $7 work dir  $8 analysis (RUN_DIR) dir
+#   $1 pdb_name  $2 engine  $3 layers  $4 intermediate_md_ns
+#   $5 final_md_ns  $6 work dir  $7 analysis (RUN_DIR) dir
 # ----------------------------------------------------------------------------
 append_csv_row() {
-  local pdb_name="$1" engine="$2" layers="$3" refinement="$4"
-  local intermediate_md_ns="$5" final_md_ns="$6" work="$7" run_dir="$8"
+  local pdb_name="$1" engine="$2" layers="$3"
+  local intermediate_md_ns="$4" final_md_ns="$5" work="$6" run_dir="$7"
   local log_file="$work/application.LOG"
 
   # --- Total runtime (seconds) --------------------------------------------
@@ -188,6 +190,13 @@ append_csv_row() {
   sr_ide="$(sr_value "$run_dir/O_system_mtIDe.lst")"
   sr_pos="$(sr_value "$run_dir/O_system_mtPOS.lst")"
 
+  # failure = 1 when we have no complete result, i.e. any of the six result metrics
+  # (rmsd_avg/rmsd_max + the four SR values) could not be populated; 0 otherwise.
+  local failure=0 v
+  for v in "$rmsd_avg" "$rmsd_max" "$sr_mer" "$sr_ida" "$sr_ide" "$sr_pos"; do
+    [[ -n "$v" ]] || { failure=1; break; }
+  done
+
   local run_timestamp
   run_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -197,7 +206,6 @@ append_csv_row() {
     "$(csv_field "$pdb_name")" \
     "$(csv_field "$engine")" \
     "$(csv_field "$layers")" \
-    "$(csv_field "$refinement")" \
     "$(csv_field "$intermediate_md_ns")" \
     "$(csv_field "$final_md_ns")" \
     "$(csv_field "$runtime")" \
@@ -207,6 +215,7 @@ append_csv_row() {
     "$(csv_field "$sr_ida")" \
     "$(csv_field "$sr_ide")" \
     "$(csv_field "$sr_pos")" \
+    "$(csv_field "$failure")" \
     "$(csv_field "$run_timestamp")" \
     "$(csv_field "$COMMIT_HASH")" \
     "$(csv_field "$CPU_INFO")" \
@@ -258,12 +267,9 @@ for SRC_PDB in "${PDB_FILES[@]}"; do
     LAYERS="$(combo_flag --layers 5 "${WDROP_ARGS[@]}")"
     INTERMEDIATE_MD_NS="$(combo_flag --intermediate-md-ns 0 "${WDROP_ARGS[@]}")"
     FINAL_MD_NS="$(combo_flag --final-md-ns 0.1 "${WDROP_ARGS[@]}")"
-    # REFINEMENT is a derived label (mirrors wdrop.sh): per_layer iff intermediate MD
-    # runs (--intermediate-md-ns > 0), else default. Drives the output-dir name below.
-    if md_enabled "$INTERMEDIATE_MD_NS"; then REFINEMENT="per_layer"; else REFINEMENT="default"; fi
 
-    # Unique working dir per combo (engine+refinement alone can collide when only
-    # the MD lengths differ), so slug the whole combo string.
+    # Unique working dir per combo (the params can coincide across combos), so slug
+    # the whole combo string.
     SLUG="$(combo_slug "$COMBO")"
     WORK="$PDB_ROOT/$SLUG"
     mkdir -p "$WORK"
@@ -273,13 +279,15 @@ for SRC_PDB in "${PDB_FILES[@]}"; do
     cp "$ORIGINAL" "$WORK/$PDBID.pdb"
     cp "$ORIGINAL" "$WORK/${PDBID}_r.pdb"
 
-    # Analysis dir: wdrop.sh writes to <PDB>_l{LAYERS}_{REFINEMENT}/. One layer is
-    # deposited per iteration, so the final iteration lands in the numbered subdir
-    # {LAYERS} — except a single-layer run, which has no numbered subdir.
+    # Analysis dir: wdrop.sh writes to <PDB>_l{LAYERS}_int{INT}_fin{FIN}/ (must mirror
+    # wdrop.sh's OUTPUT_TAG exactly). One layer is deposited per iteration, so the
+    # final iteration lands in the numbered subdir {LAYERS} — except a single-layer
+    # run, which has no numbered subdir.
+    OUTPUT_TAG="_l${LAYERS}_int${INTERMEDIATE_MD_NS}_fin${FINAL_MD_NS}"
     if (( LAYERS > 1 )); then
-      RUN_DIR="$WORK/${PDBID}_l${LAYERS}_${REFINEMENT}/${LAYERS}"
+      RUN_DIR="$WORK/${PDBID}${OUTPUT_TAG}/${LAYERS}"
     else
-      RUN_DIR="$WORK/${PDBID}_l${LAYERS}_${REFINEMENT}"
+      RUN_DIR="$WORK/${PDBID}${OUTPUT_TAG}"
     fi
 
     # TINKER_GPU is inherited from the caller's environment (set it manually
@@ -292,7 +300,7 @@ for SRC_PDB in "${PDB_FILES[@]}"; do
       log "WARNING: $PDBID '$COMBO' failed (rc=$?); recording partial results."
     fi
 
-    append_csv_row "$PDBID" "$ENGINE" "$LAYERS" "$REFINEMENT" \
+    append_csv_row "$PDBID" "$ENGINE" "$LAYERS" \
       "$INTERMEDIATE_MD_NS" "$FINAL_MD_NS" "$WORK" "$RUN_DIR"
   done
 done

@@ -193,17 +193,9 @@ esac
 
 readonly ITERATIONS="$LAYERS" # one layer deposited per iteration
 readonly WATERS_LAYERS_PER_RUN=1
-
-# REFINEMENT is a derived label (not a flag): 'per_layer' when intermediate MD runs
-# (--intermediate-md-ns > 0), 'default' when it does not. Used only for output-dir
-# naming and logging.
-if md_enabled "$INTERMEDIATE_MD_NS"; then
-  REFINEMENT="per_layer"
-else
-  REFINEMENT="default"
-fi
-readonly LAYERS REFINEMENT INTERMEDIATE_MD_NS FINAL_MD_NS
-readonly OUTPUT_TAG="_l${LAYERS}_${REFINEMENT}"
+readonly LAYERS INTERMEDIATE_MD_NS FINAL_MD_NS
+# Output-dir tag encodes the run parameters: layer count + the two MD lengths (ns).
+readonly OUTPUT_TAG="_l${LAYERS}_int${INTERMEDIATE_MD_NS}_fin${FINAL_MD_NS}"
 
 setup_logging "$LOGFILE"
 
@@ -211,7 +203,7 @@ log "Starting wdrop pipeline"
 log "INPUT_PDB=$INPUT_PDB"
 log "MODE=$MODE"
 log "LAYERS=$LAYERS (one layer per iteration -> $ITERATIONS iterations)"
-log "INTERMEDIATE_MD_NS=$INTERMEDIATE_MD_NS ns (intermediate iterations; 0 = none) -> refinement label '$REFINEMENT'"
+log "INTERMEDIATE_MD_NS=$INTERMEDIATE_MD_NS ns (intermediate iterations; 0 = none)"
 log "FINAL_MD_NS=$FINAL_MD_NS ns (final iteration)"
 log "INPUT_DIR=$INPUT_DIR"
 log "REFERENCE_PDB(optional)=$REFERENCE_PDB"

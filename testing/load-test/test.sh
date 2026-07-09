@@ -16,9 +16,8 @@ set -euo pipefail
 #   -n, --num-tests NUM        Number of test iterations to run (default: 10)
 #   -p, --path PATH            Base path for test directories (default: ./test_runs)
 #   -m, --mode MODE            Mode to test: tinker, gromacs, or all (default: all)
-#   -t, --type TYPE            Intermediate-MD preset to test: default (no
-#                              intermediate MD), per_layer (0.1 ns), a raw ns
-#                              value, or all (default: all)
+#   -t, --type TYPE            --intermediate-md-ns value(s) to test: a ns number
+#                              (0 = no intermediate MD), or all (default: all = 0 0.1)
 #   -l, --loop                 Run each mode/type combination sequentially in an
 #                              infinite loop until stopped
 #   -h, --help                 Show this help message
@@ -40,7 +39,7 @@ REFERENCE_PDB_URL=""
 NUM_TESTS=10
 TEST_BASE_PATH="./test_runs"
 TEST_MODES=("tinker" "gromacs")
-TEST_TYPES=("default" "per_layer")
+TEST_TYPES=("0" "0.1")
 LOOP_MODE=false
 
 TEST_START_TIME=$(date +%s)
@@ -70,9 +69,9 @@ Options:
                              (default: ./test_runs)
   -m, --mode MODE            Mode to test: tinker, gromacs, or all
                              (default: all)
-  -t, --type TYPE            Intermediate-MD preset to test: default (no
-                             intermediate MD), per_layer (0.1 ns), a raw ns
-                             value, or all (default: all)
+  -t, --type TYPE            --intermediate-md-ns value(s) to test: a ns number
+                             (0 = no intermediate MD), or all
+                             (default: all = 0 0.1)
   -l, --loop                 Run each mode/type combination sequentially in an
                              infinite loop until stopped
   -h, --help                 Show this help message
@@ -201,7 +200,7 @@ parse_arguments() {
         ;;
       -t|--type)
         if [[ "$2" == "all" ]]; then
-          TEST_TYPES=("default" "per_layer")
+          TEST_TYPES=("0" "0.1")
         else
           TEST_TYPES=("$2")
         fi
@@ -302,16 +301,8 @@ run_single_test_body() {
   local test_start
   test_start=$(date +%s)
 
-  # Translate the friendly type label into an --intermediate-md-ns value. 'default'
-  # = no intermediate MD (0), 'per_layer' = 0.1 ns; anything else is taken as a raw
-  # ns value (so -t 0.05 works too). wdrop derives its own default/per_layer label.
-  local intermediate_ns
-  case "$test_type" in
-    default)   intermediate_ns="0" ;;
-    per_layer) intermediate_ns="0.1" ;;
-    *)         intermediate_ns="$test_type" ;;
-  esac
-  local cmd=("$SCRIPT" "$pdb_file" "$mode" "--intermediate-md-ns" "$intermediate_ns")
+  # test_type is the --intermediate-md-ns value in ns (0 = no intermediate MD).
+  local cmd=("$SCRIPT" "$pdb_file" "$mode" "--intermediate-md-ns" "$test_type")
   if [[ -n "$REFERENCE_PDB_URL" ]]; then
     cmd+=("$reference_pdb_file")
   fi
