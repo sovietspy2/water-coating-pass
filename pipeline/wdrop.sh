@@ -275,8 +275,10 @@ for ((I = 1; I <= ITERATIONS; I++)); do
   if (( I < ITERATIONS )); then
     NEXT_IN="cycle_input.pdb"
     cp -f -- "$RUN_DIR/$(basename "$LAST_MM_OUT")" "./$NEXT_IN"
+    # Needed for tinker output pdb, tinker xyzpdb is sometimes using more columns than PDB standard defines
+    run_step "$SCRIPT_DIR/format_pdb.py" "./$NEXT_IN"
     CURRENT_IN="$NEXT_IN"
-    log "Next iteration input set to: $CURRENT_IN (copied from $(basename "$LAST_MM_OUT"))"
+    log "Next iteration input set to: $CURRENT_IN (columns normalized; copied from $(basename "$LAST_MM_OUT"))"
   fi
 done
 
