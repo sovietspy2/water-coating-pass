@@ -144,6 +144,7 @@ if md_enabled "$MD_DURATION"; then
   # Append dynamics-specific settings after minimization completes.
   cat >> "${INPUT_DIR}/md.key" <<EOF
 PARAMETERS amber99.prm
+RANDOMSEED 28480426
 RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0
 
 RATTLE
@@ -151,7 +152,7 @@ vdw-cutoff 9.0
 chg-cutoff 9.0
 EOF
   echo "ARCHIVE" >> "${INPUT_DIR}/md.key"
-  log "Generated md.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0 (trajectory mode: ARCHIVE)"
+  log "Generated md.key with: RANDOMSEED 28480426, RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0 (trajectory mode: ARCHIVE)"
 
   # Tinker9-GPU: two extra key settings required for GPU execution.
   # 1) Beeman integrator (CPU default) is not implemented in Tinker9-GPU — use velocity Verlet.

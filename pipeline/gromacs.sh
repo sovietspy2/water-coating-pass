@@ -136,7 +136,8 @@ energygrps          = Protein non-Protein
 
 gen_vel             = yes           ; Generate initial velocities
 gen_temp            = 300.0
-gen_seed            = 28480426
+gen_seed            = 28480426       ; Fixed seed
+ld_seed             = 28480426
 EOF
 }
 
