@@ -70,15 +70,12 @@ case "${TINKER_GPU:-0}" in
     *)                 TINKER_GPU_ENABLED=true ;;
 esac
 if [[ "$TINKER_GPU_ENABLED" == true ]]; then
-    MINIMIZE_CMD="minimize9"
     DYNAMIC_CMD="dynamic9"
-    command -v minimize9 >/dev/null 2>&1 || { log "ERROR: minimize9 not found in PATH (TINKER_GPU is set)"; exit 1; }
     command -v dynamic9  >/dev/null 2>&1 || { log "ERROR: dynamic9 not found in PATH (TINKER_GPU is set)";  exit 1; }
-    log "TINKER_GPU is set: using Tinker9-GPU commands (minimize9, dynamic9)"
+    log "TINKER_GPU is set: using Tinker9-GPU commands (dynamic9)"
 else
-    MINIMIZE_CMD="minimize"
     DYNAMIC_CMD="dynamic"
-    log "TINKER_GPU is not set: using standard Tinker CPU commands (minimize, dynamic)"
+    log "TINKER_GPU is not set: using standard Tinker CPU commands (dynamic)"
 fi
 
 SECONDS=0
@@ -133,7 +130,7 @@ log "Generated minimize.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 2.0"
 # 5) Minimization — pass minimze.key so protein restraints are active.
 #    minimize9 reads PARAMETERS from the key file; stdin only needs the gradient criterion.
 log "Step 5: Running minimize (energy minimization with protein restraints)"
-run_step "$MINIMIZE_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz" -k "${INPUT_DIR}/minimize.key" <<EOF
+run_step minimize "${INPUT_DIR}/${PDB_NAME}.xyz" -k "${INPUT_DIR}/minimize.key" <<EOF
 0.01
 EOF
 
