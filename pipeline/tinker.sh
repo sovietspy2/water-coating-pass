@@ -123,9 +123,10 @@ log "Protein atom count (heavy+H, before first water in XYZ): ${PROTEIN_ATOMS}"
 cat > "${INPUT_DIR}/minimize.key" <<EOF
 RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 2.0
 PARAMETERS amber99.prm
+OPENMP-THREADS 1
 EOF
 
-log "Generated minimize.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 2.0"
+log "Generated minimize.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 2.0, OPENMP-THREADS 1"
 
 # 5) Minimization — pass minimze.key so protein restraints are active.
 #    minimize9 reads PARAMETERS from the key file; stdin only needs the gradient criterion.
