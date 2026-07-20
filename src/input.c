@@ -224,7 +224,7 @@ void print_program_usage(const char *progname) {
         "Usage:\n"
         "  %s --file <input.pdb> [--sigma <radius>] [--weed-dist <dist>] [--layers <n>]\n"
         "  %s -f <input.pdb> [-s <radius>] [-w <dist>] [-n <n>]\n\n"
-        "Opciók:\n"
+        "Options:\n"
         "  -f, --file         Input PDB file (mandatory)\n"
         "  -s, --sigma        Probe radius, default: 1.8\n"
         "  -w, --weed-dist    Minimal O-O distance, default: 3.5\n"
