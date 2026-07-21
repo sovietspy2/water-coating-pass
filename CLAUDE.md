@@ -53,6 +53,10 @@ Tests live in per-purpose subdirectories under `testing/`:
 # Determinism test (verifies the C program output is bit-identical across N runs):
 ./testing/algo-deterministic-test/wdrop_deterministic_test.sh [-n <runs>]
 
+# Engine determinism suites — how much do repeated identical runs differ?
+./testing/minimize-deterministic-test/run.sh [-e gromacs|tinker|all] [-n N] [--arms pipeline|hardened|all]
+./testing/md-deterministic-test/run.sh [-e gromacs|tinker|tinker-gpu|all] [-n N] [--md-ns NS] [--arms ...]
+
 # format_pdb.py unit tests / pdb-preprocessor.py tests (pytest):
 python testing/format-pdb-test/test_format_pdb.py
 python testing/pdb-preprocess-test/test_pdb_preprocessor.py
@@ -63,6 +67,35 @@ python testing/pdb-preprocess-test/test_pdb_preprocessor.py
 # Quick local smoke wrappers (each makes a tmp dir, wgets 1R6J, runs one combo):
 ./testing/fast/{tinker,gromacs,tinker_gpu}.sh
 ```
+
+### Determinism suites (`testing/{minimize,md}-deterministic-test/`)
+
+These two suites quantify the stochastic component documented in `TINKER-DETERMINISM.md`.
+Unlike everything else under `testing/`, they drive the **engine binaries directly**
+(`minimize`, `dynamic`, `dynamic9`, `gmx mdrun`) instead of `pipeline/*.sh` — the exact
+commands, key files and mdp blocks are copied out of `pipeline/tinker.sh` and
+`pipeline/gromacs.sh` into `testing/determinism-common/determinism_lib.sh`, each with a
+source-line comment. **Changing a key or mdp setting in the pipeline means changing it there
+too**, or the suites stop measuring the shipped configuration.
+
+- Both suites share `testing/determinism-common/`: `determinism_lib.sh` (fixture build, key/mdp
+  writers, work dir, report headers), `compare_structures.py` (RMSD / max deviation split by
+  protein vs water, most-variable atoms, divergence-vs-frame), `parse_scalars.py` (engine
+  energies and iteration counts).
+- The fixture is built once per run — `pdb-preprocessor.py --target` → `wdrop --layers 1` →
+  `format_pdb.py` — and copied byte-identically into each replicate directory. The input PDB
+  (`testing/test_pdbs/1PSV_cryst.pdb`) is never modified; its sha256 is verified on exit.
+- **Precision is load-bearing.** GROMACS comparisons go through `gmx trjconv -o traj.g96`
+  (`%15.9f` nm); `.gro`'s `%8.3f` nm = 0.01 Å cannot represent the 1e-6 Å divergence these
+  suites look for. Tinker MD additionally hashes `.dyn` (16 digits) because `.arc` has only 6.
+- **`--md-ns` must stay above ~0.002 ns.** Divergence is invisible below ~500 MD steps, so a
+  shorter run reports a false pass. Default is 0.02 ns = 20 000 steps at the pipeline's 1 fs.
+- Each case runs one or two *arms*: `pipeline` (as shipped) and `hardened`
+  (`OPENMP-THREADS 1` for Tinker, `gmx mdrun -reprod -ntmpi 1 -ntomp 1` for GROMACS).
+- `tinker-gpu` reports SKIPPED and exits 0 when `dynamic9` is absent, so `-e all` still completes.
+- Reports land in `testing/<suite>/results/<UTC-timestamp>_<case>/{report.md,results.csv}`, plus a
+  `summary_<timestamp>.md` per driver run. Results are only comparable **within one machine**;
+  each report records host/CPU/threads/GPU.
 
 ## Installation of dependencies
 
