@@ -1,3 +1,4 @@
+id,pdb_name,engine,layers,intermediate_md_ns,final_md_ns,total_runtime_seconds,rmsd_avg,rmsd_max,sr_mer,sr_ida,sr_ide,sr_pos,failure,run_timestamp,commit_hash,cpu,gpu
 131,1R6J,tinker,5,0.01,0.1,1613,0.046,0.053,66.304,71.196,70.652,64.130,0,2026-07-20T22:29:11Z,9d62ae48256ad9a347c435fe9fb009f0fcc70c29,7600X,RTX4070
 132,1R6J,tinker,5,0,0.1,1355,0.046,0.053,69.565,72.826,74.457,68.478,0,2026-07-20T22:51:46Z,9d62ae48256ad9a347c435fe9fb009f0fcc70c29,7600X,RTX4070
 133,1R6J,gromacs,5,0.01,0.1,455,0.201,0.254,66.848,70.652,70.652,66.848,0,2026-07-20T22:59:21Z,9d62ae48256ad9a347c435fe9fb009f0fcc70c29,7600X,RTX4070
