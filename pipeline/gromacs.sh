@@ -66,6 +66,11 @@ log "DT_PS=$DT_PS"
 touch "${INPUT_DIR}/GROMACS.protocol"
 log "Created GROMACS.protocol file"
 
+case "${MOBYWAT_DEBUG:-0}" in
+    ''|0|false|no|off) MOBYWAT_DEBUG_ENABLED=false ;;
+    *)                 MOBYWAT_DEBUG_ENABLED=true ;;
+esac
+
 # --- TIMER SETUP ---
 SECONDS=0
 TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
@@ -368,5 +373,9 @@ EOF
 fi
 
 run_step mobywat -t [A] -w Auto -n 0-1000 -m Prediction -cls MER -v Diagnostic
+
+if [[ "$MOBYWAT_DEBUG_ENABLED" == true && -n "${REFERENCE_PDB:-}" ]]; then
+        run_step mobywat -t [A] -w Auto -n 0-1000 -m Analysis
+fi
 
 log "gromacs.sh completed successfully"

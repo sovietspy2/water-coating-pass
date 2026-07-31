@@ -69,6 +69,7 @@ case "${TINKER_GPU:-0}" in
     ''|0|false|no|off) TINKER_GPU_ENABLED=false ;;
     *)                 TINKER_GPU_ENABLED=true ;;
 esac
+
 if [[ "$TINKER_GPU_ENABLED" == true ]]; then
     DYNAMIC_CMD="dynamic9"
     command -v dynamic9  >/dev/null 2>&1 || { log "ERROR: dynamic9 not found in PATH (TINKER_GPU is set)";  exit 1; }
@@ -77,6 +78,11 @@ else
     DYNAMIC_CMD="dynamic"
     log "TINKER_GPU is not set: using standard Tinker CPU commands (dynamic)"
 fi
+
+case "${MOBYWAT_DEBUG:-0}" in
+    ''|0|false|no|off) MOBYWAT_DEBUG_ENABLED=false ;;
+    *)                 MOBYWAT_DEBUG_ENABLED=true ;;
+esac
 
 SECONDS=0
 TIMEFILE="${INPUT_DIR}/${PDB_NAME}-mm-process-time.txt"
@@ -303,5 +309,9 @@ else
 fi
 
 run_step mobywat "${MOBYWAT_ARGS[@]}" -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
+
+if [[ "$MOBYWAT_DEBUG_ENABLED" == true && -n "${REFERENCE_PDB:-}" ]]; then
+    run_step mobywat "${MOBYWAT_ARGS[@]}" -t [A] -w Auto -n 1-1000 -m Analysis
+fi
 
 log "tinker.sh completed successfully"

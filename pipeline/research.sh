@@ -19,10 +19,15 @@
 # loaded into a DB. One row is written per PDB x combo, with columns:
 #   id, pdb_name, engine, layers, intermediate_md_ns, final_md_ns,
 #   total_runtime_seconds, rmsd_avg, rmsd_max, sr_mer, sr_ida, sr_ide, sr_pos,
+#   sr_frame_min, sr_frame_max, sr_frame_avg, sr_frame_std,
 #   failure, run_timestamp, commit_hash, cpu, gpu
 # Metrics come from: total runtime (last "Total runtime was N seconds" line of
 # application.LOG), avg/max C-alpha RMSD from O_system_rmst.txt, and the final SR
-# value from each O_system_mt{MER,IDa,IDe,POS}.lst. Missing metrics are left empty.
+# value from each O_system_mt{MER,IDa,IDe,POS}.lst. The sr_frame_* columns are the
+# min/max/mean/population-standard-deviation of the PER-FRAME success rates in
+# O_system_succ.txt, which only MobyWat's Analysis mode writes — this script turns
+# that mode on by exporting MOBYWAT_DEBUG=1 (set MOBYWAT_DEBUG=0 to opt out, which
+# leaves the four columns empty). Missing metrics are left empty.
 # failure is 1 when any of the six result metrics (rmsd_avg/rmsd_max + the four SR
 # values) is empty (no usable result), else 0. cpu/gpu come from the CPU/GPU env
 # vars (UNKNOWN when unset).
@@ -67,7 +72,7 @@ RESEARCH_CSV="${RESEARCH_CSV:-$SCRIPT_DIR/../testing/research_history.csv}"
 mkdir -p "$(dirname "$RESEARCH_CSV")"
 RESEARCH_CSV="$(cd "$(dirname "$RESEARCH_CSV")" && pwd)/$(basename "$RESEARCH_CSV")"
 
-CSV_HEADER="id,pdb_name,engine,layers,intermediate_md_ns,final_md_ns,total_runtime_seconds,rmsd_avg,rmsd_max,sr_mer,sr_ida,sr_ide,sr_pos,failure,run_timestamp,commit_hash,cpu,gpu"
+CSV_HEADER="id,pdb_name,engine,layers,intermediate_md_ns,final_md_ns,total_runtime_seconds,rmsd_avg,rmsd_max,sr_mer,sr_ida,sr_ide,sr_pos,sr_frame_min,sr_frame_max,sr_frame_avg,sr_frame_std,failure,run_timestamp,commit_hash,cpu,gpu"
 
 # Collect the .pdb files to process (top level of INPUT_DIR only).
 PDB_FILES=()
@@ -83,12 +88,8 @@ done
 # runs iff --intermediate-md-ns > 0. The input/reference PDBs are added
 # automatically per combo; do NOT list them here.
 COMBOS=(
-  "tinker --layers 5 --intermediate-md-ns 0.01 --final-md-ns 0.1"
-  "tinker --layers 5 --intermediate-md-ns 0.1 --final-md-ns 0.5"
-  "tinker --layers 5 --intermediate-md-ns 0 --final-md-ns 0.1"
-  "gromacs --layers 5 --intermediate-md-ns 0.01 --final-md-ns 0.1"
-  "gromacs --layers 5 --intermediate-md-ns 0.1 --final-md-ns 0.5"
   "gromacs --layers 5 --intermediate-md-ns 0 --final-md-ns 0.1"
+  "tinker --layers 5 --intermediate-md-ns 0 --final-md-ns 0.1"
 )
 
 # Escape one CSV field (RFC 4180): wrap in double quotes and double any embedded
@@ -150,6 +151,28 @@ sr_value() {
   awk '/^SR/{print $2}' "$f" | tail -1
 }
 
+# Per-frame success-rate statistics from O_system_succ.txt (written by MobyWat
+# Analysis mode only): min, max, mean and population standard deviation of the SR
+# column, as four space-separated %.3f values. The 4 header lines are skipped by
+# requiring a numeric "<frame> <SR>" pair. Empty string when the file is missing
+# or carries no data rows.
+succ_stats() {
+  local f="$1"
+  [[ -f "$f" ]] || { printf ''; return; }
+  awk '
+    $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+(\.[0-9]+)?$/ {
+      v[++n] = $2; s += $2
+      if (n == 1 || $2 < mn) mn = $2
+      if (n == 1 || $2 > mx) mx = $2
+    }
+    END {
+      if (!n) exit
+      m = s / n
+      for (i = 1; i <= n; i++) { d = v[i] - m; q += d * d }
+      printf "%.3f %.3f %.3f %.3f", mn, mx, m, sqrt(q / n)
+    }' "$f"
+}
+
 # ----------------------------------------------------------------------------
 # Append one combo's result as a CSV row. Uses the run-level constants
 # COMMIT_HASH, CPU_INFO, GPU_INFO and the CSV_NEXT_ID counter (incremented here).
@@ -190,8 +213,16 @@ append_csv_row() {
   sr_ide="$(sr_value "$run_dir/O_system_mtIDe.lst")"
   sr_pos="$(sr_value "$run_dir/O_system_mtPOS.lst")"
 
+  # --- Per-frame SR stats (MobyWat Analysis mode; empty when it did not run) --
+  local sr_frame_min="" sr_frame_max="" sr_frame_avg="" sr_frame_std=""
+  local succ
+  succ="$(succ_stats "$run_dir/O_system_succ.txt")"
+  [[ -n "$succ" ]] && read -r sr_frame_min sr_frame_max sr_frame_avg sr_frame_std <<< "$succ"
+
   # failure = 1 when we have no complete result, i.e. any of the six result metrics
   # (rmsd_avg/rmsd_max + the four SR values) could not be populated; 0 otherwise.
+  # The sr_frame_* columns are deliberately NOT part of this test, so failure keeps
+  # the same meaning across the whole committed history.
   local failure=0 v
   for v in "$rmsd_avg" "$rmsd_max" "$sr_mer" "$sr_ida" "$sr_ide" "$sr_pos"; do
     [[ -n "$v" ]] || { failure=1; break; }
@@ -201,7 +232,7 @@ append_csv_row() {
   run_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   # Build the row through csv_field so free-text fields (cpu/gpu) stay well-formed.
-  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
     "$(csv_field "$CSV_NEXT_ID")" \
     "$(csv_field "$pdb_name")" \
     "$(csv_field "$engine")" \
@@ -215,6 +246,10 @@ append_csv_row() {
     "$(csv_field "$sr_ida")" \
     "$(csv_field "$sr_ide")" \
     "$(csv_field "$sr_pos")" \
+    "$(csv_field "$sr_frame_min")" \
+    "$(csv_field "$sr_frame_max")" \
+    "$(csv_field "$sr_frame_avg")" \
+    "$(csv_field "$sr_frame_std")" \
     "$(csv_field "$failure")" \
     "$(csv_field "$run_timestamp")" \
     "$(csv_field "$COMMIT_HASH")" \
@@ -231,6 +266,11 @@ append_csv_row() {
 COMMIT_HASH="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo UNKNOWN)"
 CPU_INFO="${CPU:-UNKNOWN}"
 GPU_INFO="${GPU:-UNKNOWN}"
+
+# MobyWat Analysis mode writes O_system_succ.txt (the per-frame SRs behind the
+# sr_frame_* columns). On by default for research runs; set MOBYWAT_DEBUG=0 to opt
+# out. TINKER_GPU keeps being inherited from the caller's environment as before.
+export MOBYWAT_DEBUG="${MOBYWAT_DEBUG:-1}"
 
 ensure_csv_header
 CSV_NEXT_ID="$(next_csv_id)"
