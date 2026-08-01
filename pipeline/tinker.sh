@@ -126,13 +126,6 @@ fi
 
 log "Protein atom count (heavy+H, before first water in XYZ): ${PROTEIN_ATOMS}"
 
-# Nonbonded cutoffs are mandatory here. The droplet is aperiodic, and Tinker defaults every
-# cutoff to infinity when there are no periodic bounds (source/cutoffs.f:42-53; Tinker User's
-# Guide p.71/p.111: "infinite for nonperiodic systems and 9.0 for periodic systems"), which
-# makes minimization O(N^2) — 7830 s for one 15.7k-atom layer before these were added.
-# The keyword is CHARGE-CUTOFF (source/cutoffs.f:178). The guide's keyword index (p.58,
-# section 8.2.10) lists it as "CHG-CUTOFF", which no Tinker version accepts; unknown keywords
-# are discarded silently, so the misspelling looks like it works.
 cat > "${INPUT_DIR}/minimize.key" <<EOF
 RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 2.0
 PARAMETERS amber99.prm
