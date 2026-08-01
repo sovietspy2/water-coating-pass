@@ -107,6 +107,9 @@ csv_field() {
 ensure_csv_header() {
   if [[ ! -s "$RESEARCH_CSV" ]]; then
     printf '%s\n' "$CSV_HEADER" >> "$RESEARCH_CSV"
+  elif [[ -n "$(tail -c1 "$RESEARCH_CSV")" ]]; then
+    printf '\n' >> "$RESEARCH_CSV"
+    log "WARNING: $RESEARCH_CSV had no trailing newline; added one before appending"
   fi
 }
 
