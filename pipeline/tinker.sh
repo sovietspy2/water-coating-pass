@@ -126,13 +126,22 @@ fi
 
 log "Protein atom count (heavy+H, before first water in XYZ): ${PROTEIN_ATOMS}"
 
+# Nonbonded cutoffs are mandatory here. The droplet is aperiodic, and Tinker defaults every
+# cutoff to infinity when there are no periodic bounds (source/cutoffs.f:42-53; Tinker User's
+# Guide p.71/p.111: "infinite for nonperiodic systems and 9.0 for periodic systems"), which
+# makes minimization O(N^2) — 7830 s for one 15.7k-atom layer before these were added.
+# The keyword is CHARGE-CUTOFF (source/cutoffs.f:178). The guide's keyword index (p.58,
+# section 8.2.10) lists it as "CHG-CUTOFF", which no Tinker version accepts; unknown keywords
+# are discarded silently, so the misspelling looks like it works.
 cat > "${INPUT_DIR}/minimize.key" <<EOF
 RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 2.0
 PARAMETERS amber99.prm
 OPENMP-THREADS 1
+VDW-CUTOFF 9.0
+CHARGE-CUTOFF 9.0
 EOF
 
-log "Generated minimize.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 2.0, OPENMP-THREADS 1"
+log "Generated minimize.key with: RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 2.0, OPENMP-THREADS 1, VDW-CUTOFF 9.0, CHARGE-CUTOFF 9.0"
 
 # 5) Minimization — pass minimze.key so protein restraints are active.
 #    minimize9 reads PARAMETERS from the key file; stdin only needs the gradient criterion.
@@ -155,8 +164,8 @@ RANDOMSEED 28480426
 RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0
 
 RATTLE
-vdw-cutoff 9.0
-chg-cutoff 9.0
+VDW-CUTOFF 9.0
+CHARGE-CUTOFF 9.0
 EOF
   echo "ARCHIVE" >> "${INPUT_DIR}/md.key"
   log "Generated md.key with: RANDOMSEED 28480426, RESTRAIN-POSITION -1 ${PROTEIN_ATOMS} 300.0 (trajectory mode: ARCHIVE)"
