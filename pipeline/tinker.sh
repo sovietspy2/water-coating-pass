@@ -182,8 +182,6 @@ EOF
   fi
 
   ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
-  # Frames dynamic writes, numbered 1..N in the .arc (no t=0 frame). Floor division,
-  # NOT ACTUAL_FRAMES' ceiling, or a non-divisible N_STEPS asks for one too many.
   MOBYWAT_FRAMES=$(( N_STEPS / SAVE_EVERY_STEPS ))
   SAVE_INTERVAL_PS="$(awk -v STEPS="$SAVE_EVERY_STEPS" -v DT="$DT_FS" 'BEGIN {
     printf "%.6f\n", (STEPS * DT) / 1000.0

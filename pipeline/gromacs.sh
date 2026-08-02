@@ -241,10 +241,6 @@ if md_enabled "$MD_DURATION"; then
   fi
 
   ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
-  # Highest frame index MobyWat can read. GROMACS writes at steps 0, S, 2S ... so
-  # indices run 0..N_STEPS/S; floor division, NOT ACTUAL_FRAMES' ceiling, or a
-  # non-divisible N_STEPS asks for one frame too many. Index 0 is the pre-MD
-  # structure, hence the -n 1-$MOBYWAT_FRAMES calls below.
   MOBYWAT_FRAMES=$(( N_STEPS / SAVE_EVERY_STEPS ))
   SAVE_INTERVAL_PS="$(steps_to_ps "$SAVE_EVERY_STEPS" "$DT_PS")"
 
