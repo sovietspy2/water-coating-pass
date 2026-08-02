@@ -99,6 +99,31 @@ should_run_mobywat() {
   esac
 }
 
+# MobyWat picks its target molecule by chain ID (-t x-y/[xy...]), both on the
+# command line (target inside the trajectory) and via REMARK mobywat_reference_target
+# (target inside the reference). Both used to be hardcoded to [A], which silently
+# validated only the first chain of every multi-chain protein.
+
+# Sorted, unique chain IDs of the CA-bearing residues of a PDB, e.g. "AB".
+# CA-bearing is the set MobyWat counts for its RMSD, so waters and heterogens drop
+# out. Only the first MODEL is read, so multi-model trajectory PDBs work unchanged.
+protein_chain_ids() {
+  awk '
+    /^ENDMDL/ { exit }
+    /^(ATOM|HETATM)/ && substr($0, 13, 4) == " CA " {
+      id = substr($0, 22, 1)
+      if (id != " ") print id
+    }' "$1" | sort -u | tr -d '\n'
+}
+
+# Target spec of a PDB, e.g. "[AB]". Derived per file: the trajectory and the
+# reference may spell their chains differently (MobyWat manual 3.1.5.2).
+mobywat_target_spec() {
+  local ids
+  ids="$(protein_chain_ids "$1")"
+  [[ -n "$ids" ]] && printf '[%s]' "$ids"
+}
+
 run_mm_step() {
   local mode="$1"
   local input_pdb="$2"

@@ -296,8 +296,13 @@ if [[ -n "${REFERENCE_PDB:-}" ]]; then
   log "Making sure Reference PDB is compatible with mobywat."
   run_step "${SCRIPT_DIR}/pdb-preprocessor.py" --reference ${SYSTEM_REF_PDB}
 
+  # One spec per file: -t selects in the trajectory, the REMARK in the reference.
+  MOBYWAT_TARGET="$(mobywat_target_spec "${MOBYWAT_INPUT_PDB}")"
+  MOBYWAT_REF_TARGET="$(mobywat_target_spec "${SYSTEM_REF_PDB}")"
+  log "MobyWat target: trajectory $MOBYWAT_TARGET, reference $MOBYWAT_REF_TARGET"
+
   log "Adding mobywat params to ${SYSTEM_REF_PDB}"
-  run_step "${SCRIPT_DIR}/add-mobywat-analysis-params.sh" ${SYSTEM_REF_PDB}
+  run_step "${SCRIPT_DIR}/add-mobywat-analysis-params.sh" ${SYSTEM_REF_PDB} "$MOBYWAT_REF_TARGET"
 
   log "Remove TER operator ID if present from ${SYSTEM_REF_PDB}"
   run_step "${SCRIPT_DIR}"/remove-ter-id.sh ${SYSTEM_REF_PDB}
@@ -308,12 +313,16 @@ if [[ -n "${REFERENCE_PDB:-}" ]]; then
   log "Running mobywat validation"
 else
   log "REFERENCE_PDB is missing or empty, PREDICTION MODE!"
+  MOBYWAT_TARGET="$(mobywat_target_spec "${MOBYWAT_INPUT_PDB}")"
+  log "MobyWat target: trajectory $MOBYWAT_TARGET (prediction only)"
 fi
 
-run_step mobywat "${MOBYWAT_ARGS[@]}" -t [A] -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
+run_step mobywat "${MOBYWAT_ARGS[@]}" -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
 
 if [[ "$MOBYWAT_DEBUG_ENABLED" == true && -n "${REFERENCE_PDB:-}" ]]; then
-    run_step mobywat "${MOBYWAT_ARGS[@]}" -t [A] -w Auto -n 1-1000 -m Analysis
+    if ! run_step mobywat "${MOBYWAT_ARGS[@]}" -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -m Analysis; then
+        log "WARNING: MobyWat Analysis failed; research.sh's sr_frame_* columns will be empty."
+    fi
 fi
 
 log "tinker.sh completed successfully"

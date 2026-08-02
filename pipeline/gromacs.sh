@@ -176,7 +176,17 @@ EOF
 }
 
 
-##
+
+# pdb2gmx only assigns chain letters when the system has 2+ chains, so a monomer arrives with a blank chain ID that no [xy...] target can select. Label it A in that case only
+ensure_chain_labels() {
+  local PDB="$1"
+  if [[ -n "$(protein_chain_ids "$PDB")" ]]; then
+    return 0
+  fi
+
+  log "No chain IDs in $PDB; labeling as chain A"
+  gmx editconf -label A -f "$PDB" -o "$PDB"
+}
 
 write_runtime() {
   local ELAPSED="$SECONDS"
@@ -322,7 +332,7 @@ EOF
 3
 EOF
 
-  run_step gmx editconf -label A -f fit.pdb -o fit.pdb
+  run_step ensure_chain_labels fit.pdb
 
   run_step gmx trjconv -f pbc3.xtc -s fit.pdb -o system.xtc -fit progressive << EOF
 3
@@ -335,7 +345,12 @@ EOF
 EOF
 
   log "REFERENCE_PDB is present and non-empty: $REFERENCE_PDB, VALIDATION MODE!"
-  run_step "${SCRIPT_DIR}"/add-mobywat-analysis-params.sh ${SYSTEM_REF_PDB}
+
+  MOBYWAT_TARGET="$(mobywat_target_spec system_tpy.pdb)"
+  MOBYWAT_REF_TARGET="$(mobywat_target_spec "$SYSTEM_REF_PDB")"
+  log "MobyWat target: trajectory $MOBYWAT_TARGET, reference $MOBYWAT_REF_TARGET"
+
+  run_step "${SCRIPT_DIR}"/add-mobywat-analysis-params.sh ${SYSTEM_REF_PDB} "$MOBYWAT_REF_TARGET"
 
   log "Remove TER operator ID if present from ${SYSTEM_REF_PDB}"
   run_step "${SCRIPT_DIR}"/remove-ter-id.sh ${SYSTEM_REF_PDB}
@@ -369,13 +384,18 @@ EOF
 0
 EOF
 
-  run_step gmx editconf -label A -f system_tpy.pdb -o system_tpy.pdb # not sure if this is the right way to do it
+  run_step ensure_chain_labels system_tpy.pdb
+
+  MOBYWAT_TARGET="$(mobywat_target_spec system_tpy.pdb)"
+  log "MobyWat target: trajectory $MOBYWAT_TARGET (prediction only)"
 fi
 
-run_step mobywat -t [A] -w Auto -n 0-1000 -m Prediction -cls MER -v Diagnostic
+run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 0-1000 -m Prediction -cls MER -v Diagnostic
 
 if [[ "$MOBYWAT_DEBUG_ENABLED" == true && -n "${REFERENCE_PDB:-}" ]]; then
-        run_step mobywat -t [A] -w Auto -n 0-1000 -m Analysis
+        if ! run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 0-1000 -m Analysis; then
+                log "WARNING: MobyWat Analysis failed; research.sh's sr_frame_* columns will be empty."
+        fi
 fi
 
 log "gromacs.sh completed successfully"
