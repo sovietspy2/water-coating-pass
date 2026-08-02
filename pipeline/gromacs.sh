@@ -390,10 +390,10 @@ EOF
   log "MobyWat target: trajectory $MOBYWAT_TARGET (prediction only)"
 fi
 
-run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 0-1000 -m Prediction -cls MER -v Diagnostic
+run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -m Prediction -cls MER -v Diagnostic
 
 if [[ "$MOBYWAT_DEBUG_ENABLED" == true && -n "${REFERENCE_PDB:-}" ]]; then
-        if ! run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 0-1000 -m Analysis; then
+        if ! run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -m Analysis; then
                 log "WARNING: MobyWat Analysis failed; research.sh's sr_frame_* columns will be empty."
         fi
 fi
