@@ -182,6 +182,9 @@ EOF
   fi
 
   ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
+  # Frames dynamic writes, numbered 1..N in the .arc (no t=0 frame). Floor division,
+  # NOT ACTUAL_FRAMES' ceiling, or a non-divisible N_STEPS asks for one too many.
+  MOBYWAT_FRAMES=$(( N_STEPS / SAVE_EVERY_STEPS ))
   SAVE_INTERVAL_PS="$(awk -v STEPS="$SAVE_EVERY_STEPS" -v DT="$DT_FS" 'BEGIN {
     printf "%.6f\n", (STEPS * DT) / 1000.0
   }')"
@@ -192,7 +195,7 @@ EOF
   log "N_STEPS=$N_STEPS"
   log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
   log "SAVE_INTERVAL_PS=$SAVE_INTERVAL_PS ps"
-  log "Expected saved frames ~= $ACTUAL_FRAMES"
+  log "Expected saved frames ~= $ACTUAL_FRAMES (MobyWat range 1-$MOBYWAT_FRAMES)"
 
   run_step "$DYNAMIC_CMD" "${INPUT_DIR}/${PDB_NAME}.xyz_2" -k "${INPUT_DIR}/md.key" <<EOF
 ${N_STEPS}
@@ -317,11 +320,11 @@ else
   log "MobyWat target: trajectory $MOBYWAT_TARGET (prediction only)"
 fi
 
-run_step mobywat "${MOBYWAT_ARGS[@]}" -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -cls MER -m Prediction -v Diagnostic
+run_step mobywat "${MOBYWAT_ARGS[@]}" -t "$MOBYWAT_TARGET" -w Auto -n "1-$MOBYWAT_FRAMES" -cls MER -m Prediction -v Diagnostic
 
 if [[ "$MOBYWAT_DEBUG_ENABLED" == true && -n "${REFERENCE_PDB:-}" ]]; then
     MOBYWAT_ANALYSIS_T0=$SECONDS
-    if ! run_step mobywat "${MOBYWAT_ARGS[@]}" -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -m Analysis; then
+    if ! run_step mobywat "${MOBYWAT_ARGS[@]}" -t "$MOBYWAT_TARGET" -w Auto -n "1-$MOBYWAT_FRAMES" -m Analysis; then
         log "WARNING: MobyWat Analysis failed; research.sh's sr_frame_* columns will be empty."
     fi
     log "MobyWat Analysis runtime: $(( SECONDS - MOBYWAT_ANALYSIS_T0 )) seconds"

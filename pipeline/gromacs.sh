@@ -241,6 +241,11 @@ if md_enabled "$MD_DURATION"; then
   fi
 
   ACTUAL_FRAMES=$(( (N_STEPS + SAVE_EVERY_STEPS - 1) / SAVE_EVERY_STEPS ))
+  # Highest frame index MobyWat can read. GROMACS writes at steps 0, S, 2S ... so
+  # indices run 0..N_STEPS/S; floor division, NOT ACTUAL_FRAMES' ceiling, or a
+  # non-divisible N_STEPS asks for one frame too many. Index 0 is the pre-MD
+  # structure, hence the -n 1-$MOBYWAT_FRAMES calls below.
+  MOBYWAT_FRAMES=$(( N_STEPS / SAVE_EVERY_STEPS ))
   SAVE_INTERVAL_PS="$(steps_to_ps "$SAVE_EVERY_STEPS" "$DT_PS")"
 
   log "Step 5: Running molecular dynamics"
@@ -249,7 +254,7 @@ if md_enabled "$MD_DURATION"; then
   log "N_STEPS=$N_STEPS"
   log "SAVE_EVERY_STEPS=$SAVE_EVERY_STEPS steps"
   log "SAVE_INTERVAL_PS=$SAVE_INTERVAL_PS ps"
-  log "Expected saved frames ~= $ACTUAL_FRAMES"
+  log "Expected saved frames ~= $ACTUAL_FRAMES (MobyWat range 1-$MOBYWAT_FRAMES)"
   log "Creating parameter file: gromacs-md.mdp"
   write_md_mdp "$N_STEPS" "$SAVE_EVERY_STEPS" "$DT_PS"
   log "Step 5a: Running grompp for molecular dynamics (using gromacs-md.mdp)"
@@ -390,11 +395,11 @@ EOF
   log "MobyWat target: trajectory $MOBYWAT_TARGET (prediction only)"
 fi
 
-run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -m Prediction -cls MER -v Diagnostic
+run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n "1-$MOBYWAT_FRAMES" -m Prediction -cls MER -v Diagnostic
 
 if [[ "$MOBYWAT_DEBUG_ENABLED" == true && -n "${REFERENCE_PDB:-}" ]]; then
         MOBYWAT_ANALYSIS_T0=$SECONDS
-        if ! run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -m Analysis; then
+        if ! run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n "1-$MOBYWAT_FRAMES" -m Analysis; then
                 log "WARNING: MobyWat Analysis failed; research.sh's sr_frame_* columns will be empty."
         fi
         log "MobyWat Analysis runtime: $(( SECONDS - MOBYWAT_ANALYSIS_T0 )) seconds"
