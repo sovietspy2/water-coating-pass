@@ -393,9 +393,11 @@ fi
 run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -m Prediction -cls MER -v Diagnostic
 
 if [[ "$MOBYWAT_DEBUG_ENABLED" == true && -n "${REFERENCE_PDB:-}" ]]; then
+        MOBYWAT_ANALYSIS_T0=$SECONDS
         if ! run_step mobywat -t "$MOBYWAT_TARGET" -w Auto -n 1-1000 -m Analysis; then
                 log "WARNING: MobyWat Analysis failed; research.sh's sr_frame_* columns will be empty."
         fi
+        log "MobyWat Analysis runtime: $(( SECONDS - MOBYWAT_ANALYSIS_T0 )) seconds"
 fi
 
 log "gromacs.sh completed successfully"

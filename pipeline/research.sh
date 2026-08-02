@@ -88,8 +88,8 @@ done
 # runs iff --intermediate-md-ns > 0. The input/reference PDBs are added
 # automatically per combo; do NOT list them here.
 COMBOS=(
-  "gromacs --layers 5 --intermediate-md-ns 0 --final-md-ns 0.1"
-  "tinker --layers 5 --intermediate-md-ns 0 --final-md-ns 0.1"
+  "gromacs --layers 5 --intermediate-md-ns 0 --final-md-ns 0.01"
+  "tinker --layers 5 --intermediate-md-ns 0 --final-md-ns 0.01"
 )
 
 # Escape one CSV field (RFC 4180): wrap in double quotes and double any embedded
@@ -194,6 +194,17 @@ append_csv_row() {
     rt_line="$(grep 'Total runtime was' "$log_file" | tail -1 || true)"
     if [[ -n "$rt_line" ]]; then
       runtime="$(printf '%s' "$rt_line" | grep -oE '[0-9]+ seconds' | tail -1 | grep -oE '[0-9]+' || true)"
+    fi
+  fi
+
+  # The MOBYWAT_DEBUG Analysis pass is a diagnostic extra, not pipeline work, so its
+  # time is deducted from the recorded runtime.
+  if [[ -n "$runtime" && -f "$log_file" ]]; then
+    local mw_line mw_seconds
+    mw_line="$(grep 'MobyWat Analysis runtime' "$log_file" | tail -1 || true)"
+    if [[ -n "$mw_line" ]]; then
+      mw_seconds="$(printf '%s' "$mw_line" | grep -oE '[0-9]+ seconds' | tail -1 | grep -oE '[0-9]+' || true)"
+      [[ -n "$mw_seconds" ]] && runtime=$(( runtime - mw_seconds ))
     fi
   fi
 
