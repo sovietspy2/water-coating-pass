@@ -1,0 +1,26 @@
+# PDB files ordered by size (largest protein first)
+# Directory: /home/hangb/sizes_test
+# Generated: 2026-09-13
+# Files: 20
+#
+# RANK FILE                 AMINO ACIDS  SOURCE CHAINS
+  1    1E2H.pdb                     662  SEQRES A:331, B:331
+  2    1RKM.pdb                     517  SEQRES A:517
+  3    16GS.pdb                     420  SEQRES A:210, B:210
+  4    1HCL.pdb                     298  SEQRES A:298
+  5    1GCI.pdb                     269  SEQRES A:269
+  6    2H7W.pdb                     262  SEQRES A:131, B:131
+  7    1S0Q.pdb                     223  SEQRES A:223
+  8    4M8V.pdb                     200  SEQRES A:100, B:100
+  9    1T2H.pdb                     192  SEQRES A:96, B:96
+  10   3E17.pdb                     176  SEQRES A:88, B:88
+  11   1WLA.pdb                     153  SEQRES A:153
+  12   2VB1.pdb                     129  SEQRES A:129
+  13   6LYZ.pdb                     129  SEQRES A:129
+  14   2HC8.pdb                     113  SEQRES A:113
+  15   1R6J.pdb                      82  SEQRES A:82
+  16   1UBQ.pdb                      76  SEQRES A:76
+  17   2O9S.pdb                      67  SEQRES A:67
+  18   2FMA.pdb                      59  SEQRES A:59
+  19   3NIR.pdb                      46  SEQRES A:46
+  20   3U7T.pdb                      46  SEQRES A:46
